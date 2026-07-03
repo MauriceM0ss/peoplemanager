@@ -22,12 +22,12 @@ Everything you add or change (people, photos, conversations, notes, tasks, edits
 
 ## Installation
 
-### 1. Clone or copy the `people-viewer/` folder
+### 1. Clone or copy the `peoplemanager/` folder
 
 The folder contains:
 
 ```
-people-viewer/
+peoplemanager/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt          # runtime deps
@@ -51,7 +51,7 @@ See [Module layout](#module-layout) for what lives inside `peoplecrm/`.
 
 ### 2. Build and start with Docker Compose
 
-Run this from inside the `people-viewer/` directory:
+Run this from inside the `peoplemanager/` directory:
 
 ```bash
 docker compose up -d --build
