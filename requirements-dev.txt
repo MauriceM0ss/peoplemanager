@@ -1,0 +1,13 @@
+# Test dependencies for running the suite locally without Docker.
+#   python -m venv venv && ./venv/bin/pip install -r requirements-dev.txt
+#   ./venv/bin/python -m pytest
+#
+# NOTE: production pins sqlcipher3==0.5.3, which compiles against the system
+# libsqlcipher. Locally that needs libsqlcipher-dev; the prebuilt
+# sqlcipher3-binary wheel is a drop-in (same sqlcipher3.dbapi2 module) so the
+# tests run without the system library. One difference: the binary wheel may
+# lack Connection.iterdump, so the change-pin re-key test self-skips there.
+flask==3.1.0
+bcrypt==4.2.1
+sqlcipher3-binary==0.6.0
+pytest==9.1.1

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Locked · People Manager</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script>(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('pv-theme')||'classic');}catch(e){document.documentElement.setAttribute('data-theme','classic');}})();</script>
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">👥</div>
+    <h1 class="auth-title">People Manager</h1>
+    <p class="auth-subtitle">Enter your PIN to continue</p>
+
+    <form method="POST" action="{{ url_for('auth.lock_screen') }}{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}" class="auth-form">
+      <input type="password" name="pin" class="auth-input" placeholder="PIN"
+             autofocus autocomplete="current-password" inputmode="numeric">
+      {% if error %}
+      <p class="auth-error">{{ error }}</p>
+      {% endif %}
+      <button type="submit" class="btn-save auth-btn">Unlock</button>
+    </form>
+    <p class="auth-hint auth-hint-small"><a href="{{ url_for('auth.reset_confirm') }}">Forgot PIN?</a></p>
+  </div>
+</body>
+</html>

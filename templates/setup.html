@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set up PIN · People Manager</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script>(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('pv-theme')||'classic');}catch(e){document.documentElement.setAttribute('data-theme','classic');}})();</script>
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">👥</div>
+    <h1 class="auth-title">People Manager</h1>
+    <p class="auth-subtitle">Set a PIN to secure the app.<br>
+      The database will be encrypted with your PIN.</p>
+
+    <form method="POST" action="{{ url_for('auth.setup') }}" class="auth-form">
+      <input type="password" name="pin" class="auth-input" placeholder="PIN (4–10 characters)"
+             autofocus autocomplete="new-password" minlength="4" maxlength="10">
+      <input type="password" name="confirm" class="auth-input" placeholder="Confirm PIN"
+             autocomplete="new-password" minlength="4" maxlength="10">
+      <label class="auth-label">Auto-lock after
+        <select name="timeout" class="auth-select">
+          <option value="5">5 minutes</option>
+          <option value="15" selected>15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">60 minutes</option>
+        </select>
+      </label>
+      {% if error %}
+      <p class="auth-error">{{ error }}</p>
+      {% endif %}
+      <button type="submit" class="btn-save auth-btn">Set PIN &amp; open</button>
+    </form>
+
+    <p class="auth-hint">
+      <strong>Note:</strong> if you forget your PIN, you will need to reset the database.
+      Export a backup regularly via Settings.
+    </p>
+  </div>
+</body>
+</html>

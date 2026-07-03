@@ -1,0 +1,21 @@
+# People Manager — a private personal CRM (people, conversations, notes, tasks, docs).
+# Build, (re)create and start with:   docker compose up -d --build
+# View logs:                          docker compose logs -f
+# Stop:                               docker compose down   (data is kept in the volume)
+services:
+  peoplemanager:
+    build: .
+    image: peoplemanager:latest
+    container_name: peoplemanager
+    restart: unless-stopped
+    ports:
+      - "8081:8080"          # http://localhost:8081  (change the left number for a different port)
+    # DB_PATH is already set in the Dockerfile (/data/people.db); nothing else is required.
+    volumes:
+      - peoplemanager-data:/data
+
+volumes:
+  peoplemanager-data:
+    # Explicit name so the volume is always "peoplemanager-data" rather than
+    # being prefixed with the Compose project name.
+    name: peoplemanager-data

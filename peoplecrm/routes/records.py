@@ -1,0 +1,237 @@
+"""CRUD for persons, meetings, tasks, notes and categories."""
+from flask import Blueprint, jsonify, request
+
+from ..db import get_db
+from ..helpers import get_categories, normalize_id
+from ..security import require_unlock
+
+bp = Blueprint("records", __name__)
+
+
+# ── persons ───────────────────────────────────────────────────────────────────
+@bp.route("/api/person", methods=["POST"])
+@require_unlock
+def create_person():
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    category = data.get("category", "Other")
+    pid      = normalize_id(name)
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO persons (person_id, name, category) VALUES (?,?,?)",
+                     (pid, name, category))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+    return jsonify({"ok": True, "person_id": pid})
+
+
+@bp.route("/api/person/<person_id>", methods=["DELETE"])
+@require_unlock
+def delete_person(person_id):
+    conn = get_db()
+    conn.execute("INSERT OR IGNORE INTO hidden_persons (person_id) VALUES (?)", (person_id,))
+    conn.execute("DELETE FROM persons          WHERE person_id = ?", (person_id,))
+    conn.execute("DELETE FROM meetings         WHERE person_id = ?", (person_id,))
+    conn.execute("DELETE FROM person_overrides WHERE person_id = ?", (person_id,))
+    conn.execute("DELETE FROM photos           WHERE person_id = ?", (person_id,))
+    conn.execute("DELETE FROM notes            WHERE person_id = ?", (person_id,))
+    conn.execute("DELETE FROM documents        WHERE person_id = ?", (person_id,))
+    conn.execute("DELETE FROM pictures         WHERE person_id = ?", (person_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/person/<person_id>", methods=["PUT"])
+@require_unlock
+def update_person(person_id):
+    data    = request.get_json() or {}
+    allowed = ("details", "profile", "name", "category")
+    if "field" not in data or data["field"] not in allowed:
+        return jsonify({"error": f"field must be one of {allowed}"}), 400
+    field   = data["field"]
+    content = data.get("content", "")
+    conn = get_db()
+    conn.execute(
+        f"""INSERT INTO person_overrides (person_id, {field})
+            VALUES (?, ?)
+            ON CONFLICT(person_id) DO UPDATE SET {field}=excluded.{field},
+                updated_at=CURRENT_TIMESTAMP""",
+        (person_id, content))
+    if field in ("name", "category"):
+        conn.execute(f"UPDATE persons SET {field}=? WHERE person_id=?", (content, person_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# ── meetings ──────────────────────────────────────────────────────────────────
+@bp.route("/api/meeting/<person_id>", methods=["POST"])
+@require_unlock
+def add_meeting(person_id):
+    data = request.get_json() or {}
+    if not data.get("title"):
+        return jsonify({"error": "title required"}), 400
+    conn = get_db()
+    cur  = conn.execute(
+        "INSERT INTO meetings (person_id, title, content, meeting_date) VALUES (?,?,?,?)",
+        (person_id, data["title"], data.get("content", ""), data.get("date") or None))
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return jsonify({"ok": True, "id": new_id})
+
+
+@bp.route("/api/meeting/<int:meeting_id>", methods=["DELETE"])
+@require_unlock
+def delete_meeting(meeting_id):
+    conn = get_db()
+    conn.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# ── categories ────────────────────────────────────────────────────────────────
+@bp.route("/api/categories", methods=["GET"])
+@require_unlock
+def list_categories():
+    return jsonify(get_categories())
+
+
+@bp.route("/api/categories", methods=["POST"])
+@require_unlock
+def add_category():
+    data = request.get_json() or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO categories (name) VALUES (?)", (name,))
+        conn.commit()
+    except Exception:
+        conn.close()
+        return jsonify({"error": "already exists"}), 409
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/categories/<path:name>", methods=["PUT"])
+@require_unlock
+def rename_category(name):
+    data     = request.get_json() or {}
+    new_name = data.get("new_name", "").strip()
+    if not new_name:
+        return jsonify({"error": "new_name required"}), 400
+    conn = get_db()
+    try:
+        conn.execute("UPDATE categories SET name=? WHERE name=?", (new_name, name))
+        conn.execute("UPDATE persons          SET category=? WHERE category=?", (new_name, name))
+        conn.execute("UPDATE person_overrides SET category=? WHERE category=?", (new_name, name))
+        conn.commit()
+    except Exception:
+        conn.close()
+        return jsonify({"error": "name already exists"}), 409
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/categories/<path:name>", methods=["DELETE"])
+@require_unlock
+def delete_category(name):
+    conn = get_db()
+    cats = [r["name"] for r in conn.execute(
+        "SELECT name FROM categories WHERE name != ? ORDER BY name", (name,)).fetchall()]
+    fallback = cats[0] if cats else "Other"
+    conn.execute("UPDATE persons          SET category=? WHERE category=?", (fallback, name))
+    conn.execute("UPDATE person_overrides SET category=? WHERE category=?", (fallback, name))
+    conn.execute("DELETE FROM categories WHERE name=?", (name,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "fallback": fallback})
+
+
+# ── tasks ─────────────────────────────────────────────────────────────────────
+@bp.route("/api/task/<person_id>", methods=["POST"])
+@require_unlock
+def add_task(person_id):
+    data = request.get_json() or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "text required"}), 400
+    conn = get_db()
+    cur  = conn.execute("INSERT INTO tasks (person_id, text) VALUES (?,?)", (person_id, text))
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return jsonify({"ok": True, "id": new_id})
+
+
+@bp.route("/api/task/<int:task_id>", methods=["PATCH"])
+@require_unlock
+def toggle_task(task_id):
+    data = request.get_json() or {}
+    done = 1 if data.get("done") else 0
+    conn = get_db()
+    conn.execute("UPDATE tasks SET done=? WHERE id=?", (done, task_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/task/<int:task_id>", methods=["DELETE"])
+@require_unlock
+def delete_task(task_id):
+    conn = get_db()
+    conn.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# ── notes ─────────────────────────────────────────────────────────────────────
+@bp.route("/api/note/<person_id>", methods=["POST"])
+@require_unlock
+def add_note(person_id):
+    data = request.get_json() or {}
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"error": "content required"}), 400
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO notes (person_id, content, note_date) VALUES (?,?,?)",
+        (person_id, content, data.get("date") or None))
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return jsonify({"ok": True, "id": new_id})
+
+
+@bp.route("/api/note/<int:note_id>", methods=["PUT"])
+@require_unlock
+def update_note(note_id):
+    data = request.get_json() or {}
+    content = data.get("content", "").strip()
+    if not content:
+        return jsonify({"error": "content required"}), 400
+    conn = get_db()
+    conn.execute("UPDATE notes SET content=?, note_date=? WHERE id=?",
+                 (content, data.get("date") or None, note_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/note/<int:note_id>", methods=["DELETE"])
+@require_unlock
+def delete_note(note_id):
+    conn = get_db()
+    conn.execute("DELETE FROM notes WHERE id=?", (note_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})

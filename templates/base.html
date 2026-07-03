@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>{% block title %}Home{% endblock %} · People Manager</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta name="theme-color" content="#07090b">
+  <!-- Apply the saved theme before the stylesheet paints, so there's no flash. -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('pv-theme') || 'neon';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'neon');
+      }
+    })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-left">
+      <button class="btn-icon btn-menu" id="btn-menu" aria-label="Toggle menu">☰</button>
+      <a href="{{ url_for('pages.index') }}" class="logo">
+        <span class="logo-text">People</span>
+      </a>
+    </div>
+    <span class="header-title">People Manager</span>
+    <div class="header-actions">
+      <button class="btn-icon" id="btn-add-person-header" data-tip="Add person" aria-label="Add person">＋</button>
+      <button class="btn-icon" id="btn-help" data-tip="Help &amp; tips" aria-label="Help and tips">?</button>
+      {% if pin_enabled %}
+      <button class="btn-icon" id="btn-lock" data-tip="Lock now" aria-label="Lock now">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="4" y="11" width="16" height="10" rx="2"></rect>
+          <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+        </svg>
+      </button>
+      {% endif %}
+      <button class="btn-icon" id="btn-settings" data-tip="Settings" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- ── Settings modal ─────────────────────────────────────────────────── -->
+  <div class="modal-backdrop" id="settings-backdrop" hidden>
+    <div class="modal settings-modal" role="dialog" aria-modal="true">
+      <h2 class="modal-title">Settings</h2>
+
+      <div class="settings-tabs" role="tablist">
+        <button class="settings-tab is-active" data-tab="appearance" role="tab">Appearance</button>
+        {% if pin_enabled %}
+        <button class="settings-tab" data-tab="security" role="tab">Security</button>
+        {% endif %}
+        <button class="settings-tab" data-tab="data" role="tab">Data</button>
+        {% block settings_tabs %}{% endblock %}
+      </div>
+
+      <!-- ── Tab: Appearance ──────────────────────────────────────────────── -->
+      <div class="settings-panel" data-panel="appearance">
+        <div class="settings-section">
+          <h3 class="settings-section-title">Appearance</h3>
+          <label class="settings-field">Theme
+            <select id="theme-select">
+              <option value="neon">Neon — dark terminal</option>
+              <option value="blue">Classic — deep blue</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+          <p class="settings-desc">Switches the colour scheme instantly. Your choice is remembered in this browser.</p>
+        </div>
+      </div>
+
+      {% if pin_enabled %}
+      <!-- ── Tab: Security ────────────────────────────────────────────────── -->
+      <div class="settings-panel" data-panel="security" hidden>
+        <div class="settings-section">
+          <h3 class="settings-section-title">🔐 Auto-lock</h3>
+          <label class="settings-field">Lock the app after
+            <select id="timeout-select">
+              <option value="5"  {% if timeout_minutes == 5  %}selected{% endif %}>5 minutes</option>
+              <option value="15" {% if timeout_minutes == 15 %}selected{% endif %}>15 minutes</option>
+              <option value="30" {% if timeout_minutes == 30 %}selected{% endif %}>30 minutes</option>
+              <option value="60" {% if timeout_minutes == 60 %}selected{% endif %}>60 minutes</option>
+            </select>
+          </label>
+        </div>
+        <div class="settings-section">
+          <h3 class="settings-section-title">🔑 PIN</h3>
+          <button class="btn-secondary" id="btn-change-pin-open">Change PIN</button>
+          <div id="change-pin-form" hidden>
+            <input type="password" id="cp-old"  class="input" placeholder="Current PIN"               autocomplete="current-password">
+            <input type="password" id="cp-new"  class="input" placeholder="New PIN (4–10 characters)"  autocomplete="new-password">
+            <input type="password" id="cp-conf" class="input" placeholder="Confirm new PIN"            autocomplete="new-password">
+            <div class="settings-row">
+              <button class="btn-primary" id="cp-save">Save</button>
+              <button class="btn-secondary" id="cp-cancel-pin">Cancel</button>
+              <span id="cp-status" class="settings-status"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ── Tab: Data ────────────────────────────────────────────────────── -->
+      <div class="settings-panel" data-panel="data" hidden>
+        <div class="settings-section">
+          <h3 class="settings-section-title">⬇ Export</h3>
+          <p class="settings-desc">Download a full backup of all data (photos, conversations, tasks, notes, documents, categories).{% if pin_enabled %} The export file is <strong>not</strong> encrypted — store it somewhere safe.{% endif %}</p>
+          <a class="btn-secondary" href="/api/export" download="people.db">Export database</a>
+        </div>
+        <div class="settings-section">
+          <h3 class="settings-section-title">⬆ Import</h3>
+          <p class="settings-desc">Restore a previously exported file. <strong>Warning:</strong> this overwrites all current data.</p>
+          <div class="settings-row">
+            <label class="btn-secondary">Choose file…
+              <input type="file" id="import-file" accept=".db" hidden>
+            </label>
+            <span id="import-filename" class="settings-filename">No file selected</span>
+          </div>
+          <div class="settings-row">
+            <button class="btn-primary" id="import-btn" disabled>Import</button>
+            <span id="import-status" class="settings-status"></span>
+          </div>
+        </div>
+      </div>
+
+      {% block settings_panels %}{% endblock %}
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="settings-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Help dialog ────────────────────────────────────────────────────── -->
+  <div class="modal-backdrop" id="help-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <h2 class="modal-title">Help &amp; tips</h2>
+      <div class="settings-section">
+        <h3 class="settings-section-title">Keyboard</h3>
+        <dl class="shortcut-list">
+          <div class="shortcut"><dt><kbd>Enter</kbd></dt><dd>Submit the focused form (add person, task, …)</dd></div>
+          <div class="shortcut"><dt><kbd>Esc</kbd></dt><dd>Close the open dialog</dd></div>
+        </dl>
+      </div>
+      <div class="settings-section">
+        <h3 class="settings-section-title">Tips</h3>
+        <ul class="help-points">
+          <li><strong>Markdown</strong> works in Key details, Profile, conversation notes and notes.</li>
+          <li>Use <strong>☰</strong> to collapse the sidebar (desktop) or open it as a drawer (mobile).</li>
+          <li>Switch <strong>themes</strong> (Classic / Neon / Light) in ⚙ Settings → Appearance.</li>
+          <li>Organise people with <strong>categories</strong>; rename or add them in Settings.</li>
+          <li>Back up regularly via <strong>Settings → Data → Export</strong>.</li>
+        </ul>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="help-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add person modal (global) ──────────────────────────────────────── -->
+  <div class="modal-backdrop" id="add-person-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <h2 class="modal-title">Add new person</h2>
+      <label class="modal-label">Name
+        <input type="text" id="np-name" class="input" placeholder="First Last" autocomplete="off">
+      </label>
+      <label class="modal-label">Category
+        <select id="np-category" class="input"></select>
+      </label>
+      <div class="modal-actions">
+        <span id="np-status"></span>
+        <button class="btn-secondary" id="np-cancel">Cancel</button>
+        <button class="btn-primary" id="np-save">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── App body ───────────────────────────────────────────────────────── -->
+  <div class="app-body">
+    <nav class="nav-sidebar" id="nav-sidebar" aria-label="Navigation">
+      <div class="nav-tree" id="nav-tree">
+        <span class="nav-tree-loading">Loading…</span>
+      </div>
+    </nav>
+    <main class="app-main">{% block content %}{% endblock %}</main>
+  </div>
+
+  <!-- ── Status bar ─────────────────────────────────────────────────────── -->
+  <footer class="app-statusbar">
+    <span class="status-item"><span class="status-dot"></span> People Manager</span>
+    {% if pin_enabled %}
+    <span class="status-item status-spacer">🔒 Auto-locks after {{ timeout_minutes }} min</span>
+    {% endif %}
+  </footer>
+
+  <script>
+  // ── Theme switching ───────────────────────────────────────────────────────
+  // The <head> applies the saved theme before paint; here we keep the picker in
+  // sync, persist changes, and match the browser/PWA chrome colour to the theme.
+  const THEME_KEY = 'pv-theme';
+  const THEME_BG = { neon: '#07090b', blue: '#05070e', light: '#eef1f6' };
+  function currentTheme() { return localStorage.getItem(THEME_KEY) || 'neon'; }
+  function applyTheme(t) {
+    if (!THEME_BG[t]) t = 'neon';
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_BG[t]);
+    const sel = document.getElementById('theme-select');
+    if (sel) sel.value = t;
+  }
+  applyTheme(currentTheme());   // sync the picker + theme-color on load
+  document.getElementById('theme-select')
+    .addEventListener('change', e => applyTheme(e.target.value));
+
+  // ── Themed dialogs ───────────────────────────────────────────────────────
+  // Promise-based, theme-styled replacements for window.confirm/prompt/alert.
+  // Resolve with: confirm → boolean, prompt → string|null, alert → undefined.
+  function appDialog(o) {
+    o = Object.assign({ kind: 'confirm', title: '', message: '', confirmLabel: 'OK',
+      cancelLabel: 'Cancel', danger: false, defaultValue: '', placeholder: '' }, o);
+    const cancelVal = o.kind === 'prompt' ? null : (o.kind === 'alert' ? undefined : false);
+    return new Promise(resolve => {
+      const prevFocus = document.activeElement;
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop app-dialog-backdrop';
+      const modal = document.createElement('div');
+      modal.className = 'modal app-dialog';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+
+      if (o.title) {
+        const h = document.createElement('h2');
+        h.className = 'modal-title'; h.textContent = o.title;
+        modal.appendChild(h);
+      }
+      if (o.message) {
+        const p = document.createElement('p');
+        p.className = 'app-dialog-msg'; p.textContent = o.message;
+        modal.appendChild(p);
+      }
+
+      let input = null;
+      const finish = val => {
+        document.removeEventListener('keydown', onKey, true);
+        backdrop.remove();
+        if (prevFocus && prevFocus.focus) { try { prevFocus.focus(); } catch (e) {} }
+        resolve(val);
+      };
+
+      if (o.kind === 'prompt') {
+        input = document.createElement('input');
+        input.type = 'text'; input.className = 'input';
+        input.value = o.defaultValue; input.placeholder = o.placeholder;
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); finish(input.value); } });
+        modal.appendChild(input);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'modal-actions';
+      let cancelBtn = null;
+      if (o.kind !== 'alert') {
+        cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button'; cancelBtn.className = 'btn-secondary';
+        cancelBtn.textContent = o.cancelLabel;
+        cancelBtn.addEventListener('click', () => finish(cancelVal));
+        actions.appendChild(cancelBtn);
+      }
+      const okBtn = document.createElement('button');
+      okBtn.type = 'button';
+      okBtn.className = o.danger ? 'btn-danger-sm' : 'btn-primary';
+      okBtn.textContent = o.confirmLabel;
+      okBtn.addEventListener('click', () => finish(o.kind === 'prompt' ? input.value : (o.kind === 'alert' ? undefined : true)));
+      actions.appendChild(okBtn);
+      modal.appendChild(actions);
+      backdrop.appendChild(modal);
+
+      backdrop.addEventListener('mousedown', e => { if (e.target === backdrop) finish(cancelVal); });
+      // Capture phase + stopImmediatePropagation so Escape dismisses only this
+      // dialog, not a modal stacked underneath.
+      const onKey = e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(cancelVal); }
+      };
+      document.addEventListener('keydown', onKey, true);
+
+      document.body.appendChild(backdrop);
+      (input || (o.danger && cancelBtn) || okBtn).focus();
+      if (input) input.select();
+    });
+  }
+  window.confirmDialog = o => appDialog(Object.assign({ kind: 'confirm', title: 'Confirm', confirmLabel: 'Confirm' }, o));
+  window.promptDialog  = o => appDialog(Object.assign({ kind: 'prompt', confirmLabel: 'Save' }, o));
+  window.alertDialog   = o => appDialog(Object.assign({ kind: 'alert', title: 'Notice', confirmLabel: 'OK' }, o));
+
+  // ── Settings modal + tabs ───────────────────────────────────────────────────
+  const settingsBackdrop = document.getElementById('settings-backdrop');
+  document.getElementById('btn-settings').addEventListener('click', () => { settingsBackdrop.hidden = false; });
+  document.getElementById('settings-close').addEventListener('click', () => { settingsBackdrop.hidden = true; });
+  settingsBackdrop.addEventListener('click', e => { if (e.target === settingsBackdrop) settingsBackdrop.hidden = true; });
+
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('is-active', t === tab));
+      document.querySelectorAll('.settings-panel').forEach(p => { p.hidden = p.dataset.panel !== target; });
+    });
+  });
+
+  // ── Help dialog ─────────────────────────────────────────────────────────────
+  const helpBackdrop = document.getElementById('help-backdrop');
+  document.getElementById('btn-help').addEventListener('click', () => { helpBackdrop.hidden = false; });
+  document.getElementById('help-close').addEventListener('click', () => { helpBackdrop.hidden = true; });
+  helpBackdrop.addEventListener('click', e => { if (e.target === helpBackdrop) helpBackdrop.hidden = true; });
+
+  // Esc closes the topmost open base-level dialog
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    for (const bd of [helpBackdrop, settingsBackdrop, document.getElementById('add-person-backdrop')]) {
+      if (bd && !bd.hidden) { bd.hidden = true; break; }
+    }
+  });
+
+  // ── Sidebar: hamburger (drawer on mobile, collapse on desktop) ───────────────
+  const navSidebar = document.getElementById('nav-sidebar');
+  const btnMenu = document.getElementById('btn-menu');
+  let navBackdrop = null;
+  function closeSidebar() {
+    navSidebar.classList.remove('open');
+    if (navBackdrop) { navBackdrop.remove(); navBackdrop = null; }
+  }
+  window.closeSidebar = closeSidebar;
+  btnMenu.addEventListener('click', () => {
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      const opening = !navSidebar.classList.contains('open');
+      navSidebar.classList.toggle('open', opening);
+      if (opening && !navBackdrop) {
+        navBackdrop = document.createElement('div');
+        navBackdrop.className = 'nav-backdrop';
+        navBackdrop.addEventListener('click', closeSidebar);
+        document.body.appendChild(navBackdrop);
+      } else if (!opening) { closeSidebar(); }
+    } else {
+      document.body.classList.toggle('nav-collapsed');
+      try { localStorage.setItem('pv-nav-collapsed', document.body.classList.contains('nav-collapsed') ? '1' : '0'); } catch (e) {}
+    }
+  });
+  try { if (localStorage.getItem('pv-nav-collapsed') === '1') document.body.classList.add('nav-collapsed'); } catch (e) {}
+
+  // ── Lock button ─────────────────────────────────────────────────────────────
+  const btnLock = document.getElementById('btn-lock');
+  if (btnLock) {
+    btnLock.addEventListener('click', async () => {
+      await fetch('/api/lock', { method: 'POST' });
+      window.location.href = '/lock';
+    });
+  }
+
+  {% if pin_enabled %}
+  // ── Auto-lock: visibly lock the screen after inactivity ───────────────────────
+  // Server-side sessions already expire, but until now the browser only found out
+  // on the next request. Here we mirror the timeout client-side: while the user is
+  // active we send a heartbeat to keep the session alive (and detect a lock from
+  // another tab / restart); once idle past the timeout we navigate to /lock so no
+  // data stays on screen.
+  let autoLockMs = {{ timeout_minutes }} * 60 * 1000;
+  let lastActivity = Date.now();
+  let lastPing = Date.now();
+  let locking = false;
+  ['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart', 'click']
+    .forEach(ev => window.addEventListener(ev, () => { lastActivity = Date.now(); }, { passive: true }));
+
+  async function autoLock() {
+    if (locking) return;
+    locking = true;
+    try { await fetch('/api/lock', { method: 'POST' }); } catch (e) {}
+    window.location.href = '/lock';
+  }
+
+  setInterval(async () => {
+    const now = Date.now();
+    if (now - lastActivity >= autoLockMs) { autoLock(); return; }
+    // Heartbeat only while genuinely active, so an idle session still expires.
+    if (now - lastActivity < 60000 && now - lastPing >= 60000) {
+      lastPing = now;
+      try {
+        const r = await fetch('/api/ping', { method: 'POST' });
+        if (r.status === 403) { window.location.href = '/lock'; }
+      } catch (e) {}
+    }
+  }, 5000);
+
+  // Keep the idle window in sync if the timeout is changed in Settings.
+  const autoLockTimeoutSelect = document.getElementById('timeout-select');
+  if (autoLockTimeoutSelect) {
+    autoLockTimeoutSelect.addEventListener('change', () => {
+      autoLockMs = parseInt(autoLockTimeoutSelect.value) * 60 * 1000;
+      lastActivity = Date.now();
+    });
+  }
+  {% endif %}
+
+  // ── Timeout select ──────────────────────────────────────────────────────────
+  const timeoutSelect = document.getElementById('timeout-select');
+  if (timeoutSelect) {
+    timeoutSelect.addEventListener('change', async () => {
+      await fetch('/api/settings/timeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: parseInt(timeoutSelect.value) }),
+      });
+    });
+  }
+
+  // ── Change PIN ──────────────────────────────────────────────────────────────
+  const btnChangePinOpen = document.getElementById('btn-change-pin-open');
+  if (btnChangePinOpen) {
+    const changePinForm = document.getElementById('change-pin-form');
+    const cpOld    = document.getElementById('cp-old');
+    const cpNew    = document.getElementById('cp-new');
+    const cpConf   = document.getElementById('cp-conf');
+    const cpSave   = document.getElementById('cp-save');
+    const cpCancel = document.getElementById('cp-cancel-pin');
+    const cpStatus = document.getElementById('cp-status');
+
+    btnChangePinOpen.addEventListener('click', () => {
+      changePinForm.hidden = false;
+      btnChangePinOpen.hidden = true;
+      cpOld.focus();
+    });
+    cpCancel.addEventListener('click', () => {
+      changePinForm.hidden = true;
+      btnChangePinOpen.hidden = false;
+      cpOld.value = cpNew.value = cpConf.value = '';
+      cpStatus.textContent = '';
+    });
+    cpSave.addEventListener('click', async () => {
+      if (cpNew.value !== cpConf.value) { cpStatus.textContent = 'PINs do not match.'; return; }
+      cpSave.disabled = true;
+      cpStatus.textContent = 'Saving…';
+      const res = await fetch('/api/change-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_pin: cpOld.value, new_pin: cpNew.value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        cpStatus.textContent = '✓ PIN changed';
+        setTimeout(() => cpCancel.click(), 1500);
+      } else {
+        cpStatus.textContent = '✗ ' + (data.error || 'Error');
+      }
+      cpSave.disabled = false;
+    });
+  }
+
+  // ── Import ──────────────────────────────────────────────────────────────────
+  const importFile     = document.getElementById('import-file');
+  const importFilename = document.getElementById('import-filename');
+  const importBtn      = document.getElementById('import-btn');
+  const importStatus   = document.getElementById('import-status');
+
+  importFile.addEventListener('change', () => {
+    const f = importFile.files[0];
+    importFilename.textContent = f ? f.name : 'No file selected';
+    importBtn.disabled = !f;
+    importStatus.textContent = '';
+  });
+
+  importBtn.addEventListener('click', async () => {
+    const f = importFile.files[0];
+    if (!f) return;
+    if (!await confirmDialog({ title: 'Overwrite database?', message: 'All current data will be replaced by the imported file. This cannot be undone.', confirmLabel: 'Overwrite', danger: true })) return;
+    importBtn.disabled = true;
+    importStatus.textContent = 'Importing…';
+    const fd = new FormData();
+    fd.append('db', f);
+    const res = await fetch('/api/import', { method: 'POST', body: fd });
+    if (res.ok) {
+      importStatus.textContent = '✓ Imported — reloading page…';
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      importStatus.textContent = '✗ ' + (data.error || 'Error importing');
+      importBtn.disabled = false;
+    }
+  });
+
+  // ── Add person (global) ──────────────────────────────────────────────────────
+  const addPersonBackdrop = document.getElementById('add-person-backdrop');
+  const npName   = document.getElementById('np-name');
+  const npCat    = document.getElementById('np-category');
+  const npSave   = document.getElementById('np-save');
+  const npCancel = document.getElementById('np-cancel');
+  const npStatus = document.getElementById('np-status');
+
+  async function openAddPersonModal() {
+    const res = await fetch('/api/categories');
+    if (res.ok) {
+      const cats = await res.json();
+      npCat.innerHTML = cats.map(c =>
+        `<option value="${c.replace(/"/g,'&quot;')}">${c.replace(/</g,'&lt;')}</option>`
+      ).join('');
+    }
+    npName.value = '';
+    npStatus.textContent = '';
+    addPersonBackdrop.hidden = false;
+    npName.focus();
+  }
+  function closeAddPersonModal() { addPersonBackdrop.hidden = true; }
+
+  document.getElementById('btn-add-person-header').addEventListener('click', openAddPersonModal);
+  const _btnAddToolbar = document.getElementById('btn-add-person');
+  if (_btnAddToolbar) _btnAddToolbar.addEventListener('click', openAddPersonModal);
+
+  npCancel.addEventListener('click', closeAddPersonModal);
+  addPersonBackdrop.addEventListener('click', e => { if (e.target === addPersonBackdrop) closeAddPersonModal(); });
+  npName.addEventListener('keydown', e => { if (e.key === 'Enter') npSave.click(); });
+
+  npSave.addEventListener('click', async () => {
+    const name = npName.value.trim();
+    if (!name) { npStatus.textContent = 'Please enter a name.'; return; }
+    npSave.disabled = true;
+    npStatus.textContent = 'Adding…';
+    const res = await fetch('/api/person', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, category: npCat.value }),
+    });
+    if (!res.ok) { npStatus.textContent = '✗ Error'; npSave.disabled = false; return; }
+    const { person_id } = await res.json();
+    window.location.href = `/person/${person_id}`;
+  });
+
+  // ── Navigation tree ───────────────────────────────────────────────────────
+  (async () => {
+    const treeEl = document.getElementById('nav-tree');
+    if (!treeEl) return;
+
+    const activePid = window.location.pathname.startsWith('/person/')
+      ? window.location.pathname.slice('/person/'.length)
+      : null;
+
+    const COLLAPSE_KEY = 'nav-sidebar-collapsed';
+    let collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]'));
+
+    const PERSON_EXPAND_KEY = 'nav-person-expanded';
+    let personExpanded = new Set(JSON.parse(localStorage.getItem(PERSON_EXPAND_KEY) || '[]'));
+    const PERSON_SECTIONS = [['tasks', 'Tasks'], ['notes', 'Notes'], ['documents', 'Documents']];
+
+    let data;
+    try {
+      const r = await fetch('/api/tree');
+      if (!r.ok) { treeEl.innerHTML = ''; return; }
+      data = await r.json();
+    } catch { treeEl.innerHTML = ''; return; }
+
+    const ul = document.createElement('ul');
+    ul.className = 'tree-list';
+
+    for (const { category, people } of data) {
+      const hasActive = people.some(p => p.id === activePid);
+      const isOpen = hasActive || !collapsed.has(category);
+
+      const catLi = document.createElement('li');
+      catLi.className = 'tree-cat-item';
+
+      const catRow = document.createElement('div');
+      catRow.className = 'tree-cat-row';
+      catRow.innerHTML =
+        `<span class="tree-arrow">${isOpen ? '▾' : '▶'}</span>` +
+        `<span class="tree-cat-label">${category}</span>` +
+        `<span class="tree-count">${people.length}</span>`;
+      catLi.appendChild(catRow);
+
+      const peopleUl = document.createElement('ul');
+      peopleUl.className = 'tree-people-list';
+      if (!isOpen) peopleUl.hidden = true;
+
+      for (const p of people) {
+        const isActivePerson = p.id === activePid;
+        const li = document.createElement('li');
+        li.className = 'tree-person-item' + (isActivePerson ? ' active' : '');
+
+        const row = document.createElement('div');
+        row.className = 'tree-person-row';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'tree-person-arrow';
+
+        const a = document.createElement('a');
+        a.href = '/person/' + p.id;
+        a.className = 'tree-person-link';
+        a.textContent = p.name;
+
+        // Sub-navigation: Tasks / Notes / Documents → jump to that section.
+        const subUl = document.createElement('ul');
+        subUl.className = 'tree-subnav';
+        for (const [anchor, label] of PERSON_SECTIONS) {
+          const subLi = document.createElement('li');
+          const subA = document.createElement('a');
+          subA.className = 'tree-subnav-link';
+          subA.href = '/person/' + p.id + '#' + anchor;
+          const subLabel = document.createElement('span');
+          subLabel.className = 'tree-subnav-label';
+          subLabel.textContent = label;
+          subA.appendChild(subLabel);
+          const count = p[anchor] || 0;
+          if (count > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'tree-subnav-count';
+            badge.textContent = count;
+            subA.appendChild(badge);
+          }
+          subLi.appendChild(subA);
+          subUl.appendChild(subLi);
+        }
+
+        const expanded = isActivePerson || personExpanded.has(p.id);
+        subUl.hidden = !expanded;
+        arrow.textContent = expanded ? '▾' : '▸';
+
+        arrow.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          const opening = subUl.hidden;
+          subUl.hidden = !opening;
+          arrow.textContent = opening ? '▾' : '▸';
+          if (opening) personExpanded.add(p.id);
+          else personExpanded.delete(p.id);
+          localStorage.setItem(PERSON_EXPAND_KEY, JSON.stringify([...personExpanded]));
+        });
+
+        row.appendChild(arrow);
+        row.appendChild(a);
+        li.appendChild(row);
+        li.appendChild(subUl);
+        peopleUl.appendChild(li);
+      }
+
+      catLi.appendChild(peopleUl);
+      ul.appendChild(catLi);
+
+      catRow.addEventListener('click', () => {
+        const opening = peopleUl.hidden;
+        peopleUl.hidden = !opening;
+        catRow.querySelector('.tree-arrow').textContent = opening ? '▾' : '▶';
+        if (opening) collapsed.delete(category);
+        else collapsed.add(category);
+        localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed]));
+      });
+    }
+
+    treeEl.innerHTML = '';
+    treeEl.appendChild(ul);
+
+    const activeEl = treeEl.querySelector('.tree-person-item.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+
+    // Highlight the sub-link matching the section currently in view.
+    function highlightSubnav() {
+      const h = location.hash.slice(1);
+      treeEl.querySelectorAll('.tree-subnav-link').forEach(l => {
+        l.classList.toggle('active', h !== '' && l.getAttribute('href').endsWith('#' + h));
+      });
+    }
+    highlightSubnav();
+    window.addEventListener('hashchange', highlightSubnav);
+  })();
+
+  // Wire optional "Manage categories" button (only present on the index page)
+  const btnCatManage = document.getElementById('btn-cat-manage-settings');
+  if (btnCatManage) {
+    btnCatManage.addEventListener('click', () => {
+      settingsBackdrop.hidden = true;
+      const cb = document.getElementById('cats-backdrop');
+      if (cb) cb.hidden = false;
+    });
+  }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

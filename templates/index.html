@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+
+{% block settings_tabs %}
+<button class="settings-tab" data-tab="categories" role="tab">Categories</button>
+{% endblock %}
+
+{% block settings_panels %}
+<div class="settings-panel" data-panel="categories" hidden>
+  <div class="settings-section">
+    <h3 class="settings-section-title">🏷 Categories</h3>
+    <p class="settings-desc">Add, rename or delete the categories people are grouped under.</p>
+    <button class="btn-secondary" id="btn-cat-manage-settings">Manage categories</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+{% set cats = people|map(attribute='category')|unique|list|sort %}
+<div class="toolbar">
+  <input id="search" type="search" placeholder="Search by name…" autocomplete="off">
+  <select id="cat-select" class="sort-select" title="Category">
+    <option value="">Everyone ({{ people|length }})</option>
+    {% for cat in cats %}
+    <option value="{{ cat }}">{{ cat }} ({{ people|selectattr('category','eq',cat)|list|length }})</option>
+    {% endfor %}
+  </select>
+  <select id="sort-select" class="sort-select" title="Sort">
+    <option value="name-asc">Name A → Z</option>
+    <option value="name-desc">Name Z → A</option>
+    <option value="meetings-desc">Most conversations</option>
+    <option value="last-desc">Last conversation</option>
+  </select>
+  <button class="btn-primary" id="btn-add-person">＋ Person</button>
+</div>
+
+<!-- ── Categories manager modal ── -->
+<div class="modal-backdrop" id="cats-backdrop" hidden>
+  <div class="modal modal-wide" role="dialog" aria-modal="true">
+    <h2 class="modal-title">Manage categories</h2>
+    <ul class="cats-list" id="cats-list">
+      {% for cat in categories %}
+      <li class="cat-row" data-cat="{{ cat }}">
+        <span class="cat-dot" style="background:{{ cat | category_color }}"></span>
+        <span class="cat-name">{{ cat }}</span>
+        <input class="cat-name-input" type="text" value="{{ cat }}" hidden>
+        <div class="cat-actions">
+          <button class="cat-btn cat-edit"   title="Rename">✏️</button>
+          <button class="cat-btn cat-save"   title="Save" hidden>✓</button>
+          <button class="cat-btn cat-cancel" title="Cancel" hidden>✕</button>
+          <button class="cat-btn cat-delete" title="Delete">🗑</button>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="cats-add-row">
+      <input type="text" id="new-cat-input" placeholder="New category…" autocomplete="off">
+      <button class="btn-save" id="new-cat-save">Add</button>
+    </div>
+    <div style="text-align:right;margin-top:8px">
+      <button class="btn-cancel" id="cats-close">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="grid" id="grid">
+  {% for p in people %}
+  <a class="card" href="{{ url_for('pages.person_detail', person_id=p.id) }}"
+     data-name="{{ p.name|lower }}"
+     data-cat="{{ p.category }}"
+     data-meetings="{{ p.meeting_count }}"
+     data-last="{{ p.last_meeting.isoformat() if p.last_meeting else '' }}">
+    <div class="avatar-wrap">
+      {% if p.has_photo %}
+      <img class="avatar" src="{{ url_for('files.get_photo', person_id=p.id) }}" alt="{{ p.name }}" loading="lazy">
+      {% else %}
+      <div class="avatar avatar-initials" style="background:{{ p.id | initials_color }}">
+        {{ p.name.split()[0][0] }}{% if p.name.split()|length > 1 %}{{ p.name.split()[-1][0] }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <h2 class="card-name">{{ p.name }}</h2>
+      <span class="badge" style="background:{{ p.category | category_color }}">{{ p.category }}</span>
+      <div class="card-meta">
+        <span title="Number of conversations">💬 {{ p.meeting_count }}</span>
+        {% if p.last_meeting %}
+        <span title="Last conversation">📅 {{ p.last_meeting.strftime('%d %b %Y') }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+<p class="empty" id="empty" hidden>No people found.</p>
+
+<script>
+const search    = document.getElementById('search');
+const catSelect = document.getElementById('cat-select');
+const cards     = Array.from(document.querySelectorAll('.card'));
+const empty     = document.getElementById('empty');
+
+function update() {
+  const q         = search.value.toLowerCase();
+  const activeCat = catSelect.value;
+  let shown = 0;
+  cards.forEach(card => {
+    const visible = card.dataset.name.includes(q) && (!activeCat || card.dataset.cat === activeCat);
+    card.style.display = visible ? '' : 'none';
+    if (visible) shown++;
+  });
+  empty.style.display = shown > 0 ? 'none' : '';
+}
+
+search.addEventListener('input', update);
+
+catSelect.addEventListener('change', () => {
+  localStorage.setItem('robsidian-cat', catSelect.value);
+  update();
+});
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+const grid       = document.getElementById('grid');
+const sortSelect = document.getElementById('sort-select');
+
+function sortCards() {
+  const val    = sortSelect.value;
+  const sorted = [...cards];
+  if (val === 'name-asc') {
+    sorted.sort((a, b) => a.dataset.name.localeCompare(b.dataset.name, 'nl'));
+  } else if (val === 'name-desc') {
+    sorted.sort((a, b) => b.dataset.name.localeCompare(a.dataset.name, 'nl'));
+  } else if (val === 'meetings-desc') {
+    sorted.sort((a, b) => parseInt(b.dataset.meetings) - parseInt(a.dataset.meetings));
+  } else if (val === 'last-desc') {
+    sorted.sort((a, b) => (b.dataset.last || '').localeCompare(a.dataset.last || ''));
+  }
+  sorted.forEach(card => grid.appendChild(card));
+  update();
+}
+
+sortSelect.addEventListener('change', () => {
+  localStorage.setItem('robsidian-sort', sortSelect.value);
+  sortCards();
+});
+
+// ── Restore saved preferences ─────────────────────────────────────────────────
+const savedSort = localStorage.getItem('robsidian-sort');
+if (savedSort) sortSelect.value = savedSort;
+
+const savedCat = localStorage.getItem('robsidian-cat');
+if (savedCat !== null) catSelect.value = savedCat;
+
+sortCards(); // applies sort + filter in one pass
+
+// ── Categories manager ────────────────────────────────────────────────────────
+const catsBackdrop = document.getElementById('cats-backdrop');
+
+document.getElementById('cats-close').addEventListener('click', () => {
+  catsBackdrop.hidden = true;
+});
+catsBackdrop.addEventListener('click', e => {
+  if (e.target === catsBackdrop) catsBackdrop.hidden = true;
+});
+
+function wireCatRow(li) {
+  const nameSpan  = li.querySelector('.cat-name');
+  const nameInput = li.querySelector('.cat-name-input');
+  const editBtn   = li.querySelector('.cat-edit');
+  const saveBtn   = li.querySelector('.cat-save');
+  const cancelBtn = li.querySelector('.cat-cancel');
+  const deleteBtn = li.querySelector('.cat-delete');
+  const original  = () => li.dataset.cat;
+
+  editBtn.addEventListener('click', () => {
+    nameSpan.hidden  = true;
+    nameInput.hidden = false;
+    editBtn.hidden   = true;
+    saveBtn.hidden   = false;
+    cancelBtn.hidden = false;
+    nameInput.focus();
+    nameInput.select();
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    nameInput.value  = original();
+    nameSpan.hidden  = false;
+    nameInput.hidden = true;
+    editBtn.hidden   = false;
+    saveBtn.hidden   = true;
+    cancelBtn.hidden = true;
+  });
+
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveBtn.click(); });
+
+  saveBtn.addEventListener('click', async () => {
+    const newName = nameInput.value.trim();
+    if (!newName || newName === original()) { cancelBtn.click(); return; }
+    saveBtn.disabled = true;
+    const res = await fetch(`/api/categories/${encodeURIComponent(original())}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_name: newName }),
+    });
+    if (!res.ok) { alertDialog({ message: 'A category with that name already exists.' }); saveBtn.disabled = false; return; }
+    li.dataset.cat = newName;
+    nameSpan.textContent = newName;
+    nameInput.value = newName;
+    cancelBtn.click();
+    saveBtn.disabled = false;
+    sessionStorage.setItem('reopen-cats', '1');
+    location.reload();
+  });
+
+  deleteBtn.addEventListener('click', async () => {
+    if (!await confirmDialog({ title: 'Delete category?', message: `Delete category "${original()}"? People in this category will be moved to the first available category.`, confirmLabel: 'Delete', danger: true })) return;
+    deleteBtn.disabled = true;
+    const res = await fetch(`/api/categories/${encodeURIComponent(original())}`, { method: 'DELETE' });
+    if (!res.ok) { deleteBtn.disabled = false; return; }
+    li.remove();
+    sessionStorage.setItem('reopen-cats', '1');
+    location.reload();
+  });
+}
+
+document.querySelectorAll('.cat-row').forEach(wireCatRow);
+
+const newCatInput = document.getElementById('new-cat-input');
+document.getElementById('new-cat-save').addEventListener('click', async () => {
+  const name = newCatInput.value.trim();
+  if (!name) return;
+  const res = await fetch('/api/categories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) { alertDialog({ message: 'That category already exists.' }); return; }
+  newCatInput.value = '';
+  sessionStorage.setItem('reopen-cats', '1');
+  location.reload();
+});
+newCatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('new-cat-save').click();
+});
+
+// Re-open categories modal after a reload triggered by a category add/delete
+if (sessionStorage.getItem('reopen-cats')) {
+  sessionStorage.removeItem('reopen-cats');
+  catsBackdrop.hidden = false;
+}
+
+</script>
+{% endblock %}

@@ -1,0 +1,1054 @@
+{% extends "base.html" %}
+{% block title %}{{ person.name }}{% endblock %}
+
+{% block content %}
+<div class="person-layout">
+
+  <!-- ── sidebar ── -->
+  <aside class="sidebar">
+    {% if person.has_photo %}
+    <img class="avatar-lg" id="avatar-img"
+         src="{{ url_for('files.get_photo', person_id=person.id) }}"
+         alt="{{ person.name }}">
+    {% else %}
+    <div class="avatar-lg avatar-initials-lg" id="avatar-img"
+         style="background:{{ person.id | initials_color }}">
+      {{ person.name.split()[0][0] }}{% if person.name.split()|length > 1 %}{{ person.name.split()[-1][0] }}{% endif %}
+    </div>
+    {% endif %}
+
+    <h1 class="person-name" id="display-name">{{ person.name }}</h1>
+    <span class="badge" id="display-badge" style="background:{{ person.category | category_color }}">{{ person.category }}</span>
+
+    <button class="btn-edit-person" id="btn-edit-person">✏️ Edit</button>
+
+    <section class="sidebar-section">
+      <h3>Key details</h3>
+      <div class="md-content" id="details-view" data-raw="{{ person.details | e }}"></div>
+    </section>
+
+    <section class="sidebar-section">
+      <h3>Profile overview</h3>
+      <div class="md-content" id="profile-view" data-raw="{{ person.profile | e }}"></div>
+    </section>
+
+    <div class="danger-zone">
+      <button class="btn-delete-person" id="btn-delete-person">🗑 Remove person</button>
+    </div>
+  </aside>
+
+  <!-- ── Edit person modal ── -->
+  <div class="modal-backdrop" id="edit-backdrop" hidden>
+    <div class="modal modal-edit" role="dialog" aria-modal="true">
+      <h2 class="modal-title">Edit</h2>
+      <div class="edit-photo-row">
+        <label class="btn-upload" title="Change photo">
+          📷 Upload photo
+          <input type="file" id="photo-input" accept="image/*" hidden>
+        </label>
+        {% if person.has_photo %}
+        <button class="btn-remove" id="btn-remove" title="Remove photo">✕ Remove photo</button>
+        {% endif %}
+        <span id="upload-status"></span>
+      </div>
+      <label class="modal-label">Name
+        <input type="text" id="edit-name" value="{{ person.name }}">
+      </label>
+      <label class="modal-label">Category
+        <select id="edit-category">
+          {% for cat in categories %}
+          <option value="{{ cat }}" {% if cat == person.category %}selected{% endif %}>{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="modal-label">Key details <span class="modal-label-hint">(markdown)</span>
+        <textarea class="modal-textarea" id="edit-details">{{ person.details }}</textarea>
+      </label>
+      <label class="modal-label">Profile overview <span class="modal-label-hint">(markdown)</span>
+        <textarea class="modal-textarea" id="edit-profile">{{ person.profile }}</textarea>
+      </label>
+      <div class="modal-actions">
+        <button class="btn-save" id="edit-save">Save</button>
+        <button class="btn-cancel" id="edit-cancel">Cancel</button>
+        <span id="edit-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Document preview modal ── -->
+  <div class="modal-backdrop" id="doc-preview-backdrop" hidden>
+    <div class="modal modal-doc-preview" role="dialog" aria-modal="true">
+      <div class="doc-preview-header">
+        <h2 class="modal-title" id="doc-preview-title"></h2>
+        <div class="doc-preview-actions">
+          <a class="btn-save" id="doc-preview-download">Download</a>
+          <button class="btn-cancel" id="doc-preview-close">Close</button>
+        </div>
+      </div>
+      <div id="doc-preview-body"></div>
+    </div>
+  </div>
+
+  <!-- ── Picture lightbox ── -->
+  <div class="modal-backdrop" id="pic-lightbox" hidden>
+    <div class="pic-lightbox-inner">
+      <img id="pic-lightbox-img" src="" alt="">
+      <div class="pic-lightbox-bar">
+        <span id="pic-lightbox-name"></span>
+        <a class="btn-secondary btn-sm" id="pic-lightbox-download" download>Download</a>
+        <button class="btn-secondary btn-sm" id="pic-lightbox-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── main content ── -->
+  <div class="main-panes">
+  <div class="meetings-pane person-section" data-section="conversations">
+    <div class="meetings-heading">
+      <h2>Conversations <span class="meeting-count" id="meeting-count">{{ person.meeting_count }}</span></h2>
+      <button class="btn-new-meeting" id="btn-new-meeting">+ Add conversation</button>
+    </div>
+
+    <!-- ── new meeting form ── -->
+    <div class="new-meeting-form" id="new-meeting-form" hidden>
+      <div class="form-row">
+        <label>Date
+          <input type="date" id="nm-date" value="{{ today }}">
+        </label>
+        <label style="flex:2">Title
+          <input type="text" id="nm-title" placeholder="E.g. 2026-05-27 - Conversation with {{ person.name }}">
+        </label>
+      </div>
+      <label>Notes (markdown)
+        <textarea id="nm-content" rows="8" placeholder="What was discussed?"></textarea>
+      </label>
+      <div class="form-actions">
+        <button class="btn-save" id="nm-save">Save</button>
+        <button class="btn-cancel" id="nm-cancel">Cancel</button>
+        <span id="nm-status"></span>
+      </div>
+    </div>
+
+    {% if person.meetings %}
+    <div class="meetings-list" id="meetings-list">
+      {% for m in person.meetings %}
+      <details class="meeting-item" {% if loop.first %}open{% endif %}
+               {% if m.db_id is defined and m.db_id %}data-db-id="{{ m.db_id }}"{% endif %}>
+        <summary class="meeting-summary">
+          <span class="meeting-title">{{ m.title }}</span>
+          <span class="meeting-summary-right">
+            {% if m.date %}<span class="meeting-date">{{ m.date.strftime('%d %b %Y') }}</span>{% endif %}
+            {% if m.db_id is defined and m.db_id %}
+            <button class="btn-delete-meeting" data-id="{{ m.db_id }}" title="Delete this conversation">🗑</button>
+            {% endif %}
+          </span>
+        </summary>
+        <div class="meeting-content md-content" data-md="{{ m.content | e }}"></div>
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-meetings" id="no-meetings">No conversations recorded yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="tasks-notes-row">
+  <!-- ── Taken ── -->
+  <div class="tasks-pane person-section" id="tasks" data-section="tasks" hidden>
+    <div class="tasks-heading">
+      <h2>Tasks <span class="meeting-count" id="task-count">{{ tasks|length }}</span></h2>
+    </div>
+
+    <ul class="task-list" id="task-list">
+      {% for t in tasks %}
+      <li class="task-item {% if t.done %}task-done{% endif %}" data-id="{{ t.id }}" data-done="{{ 'true' if t.done else 'false' }}">
+        <label class="task-label">
+          <input type="checkbox" class="task-check" {% if t.done %}checked{% endif %}>
+          <span class="task-text">{{ t.text }}</span>
+        </label>
+        <button class="task-delete" title="Delete task">✕</button>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <div class="task-add-row">
+      <input type="text" id="task-input" placeholder="New task…" autocomplete="off">
+      <button class="btn-save task-add-btn" id="task-add-btn">Add</button>
+    </div>
+  </div>
+
+  <!-- ── Notes ── -->
+  <div class="notes-pane person-section" id="notes" data-section="notes" hidden>
+    <div class="notes-heading">
+      <h2>Notes <span class="meeting-count" id="note-count">{{ notes|length }}</span></h2>
+      <button class="btn-new-note" id="btn-new-note">+ Add note</button>
+    </div>
+
+    <div class="new-meeting-form" id="new-note-form" hidden>
+      <div class="form-row">
+        <label>Date
+          <input type="date" id="nn-date" value="{{ today }}">
+        </label>
+      </div>
+      <label>Note
+        <textarea id="nn-content" rows="6" placeholder="Write a note…"></textarea>
+      </label>
+      <div class="form-actions">
+        <button class="btn-save" id="nn-save">Save</button>
+        <button class="btn-cancel" id="nn-cancel">Cancel</button>
+        <span id="nn-status"></span>
+      </div>
+    </div>
+
+    <div class="notes-list" id="notes-list">
+      {% for n in notes %}
+      <details class="note-item" data-id="{{ n.id }}">
+        <summary class="note-summary">
+          <span class="note-summary-left">
+            <span class="note-date-badge">{{ n.date.strftime('%d %b %Y') if n.date else '—' }}</span>
+            <span class="note-preview">{{ n.content.split('\n')[0][:80] }}</span>
+          </span>
+          <button class="btn-delete-note" data-id="{{ n.id }}" title="Delete note">🗑</button>
+        </summary>
+        <div class="note-body">
+          <div class="note-view">
+            <div class="note-text">{{ n.content }}</div>
+            <button class="btn-note-edit">✏ Edit</button>
+          </div>
+          <div class="note-edit" hidden>
+            <input type="date" class="note-edit-date" value="{{ n.date.isoformat() if n.date else '' }}">
+            <textarea class="note-edit-textarea">{{ n.content }}</textarea>
+            <div class="form-actions">
+              <button class="btn-save note-save-btn">Save</button>
+              <button class="btn-cancel note-cancel-btn">Cancel</button>
+              <span class="note-edit-status"></span>
+            </div>
+          </div>
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% if not notes %}
+    <p class="no-meetings" id="no-notes">No notes yet.</p>
+    {% endif %}
+  </div>
+
+  </div><!-- end tasks-notes-row -->
+
+  <!-- ── Documents ── -->
+  <div class="documents-pane person-section" id="documents" data-section="documents" hidden>
+    <div class="documents-heading">
+      <h2>Documents <span class="meeting-count" id="doc-count">{{ documents|length }}</span></h2>
+      <label class="doc-upload-label" title="Upload document">
+        + Upload
+        <input type="file" id="doc-input" hidden multiple
+               accept=".txt,.md,.log,.csv,.rtf,.json,.xml,.yaml,.yml,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.pdf">
+      </label>
+    </div>
+
+    <div class="doc-list" id="doc-list">
+      {% for d in documents %}
+      <div class="doc-item" data-id="{{ d.id }}">
+        <span class="doc-icon">{{ d.filename.rsplit('.',1)[-1].lower() | doc_icon }}</span>
+        <span class="doc-name">{{ d.filename }}</span>
+        <span class="doc-meta">{{ d.size_human }} · {{ d.uploaded_at.strftime('%d %b %Y') }}</span>
+        <button class="doc-btn doc-view-btn" data-id="{{ d.id }}" data-name="{{ d.filename | e }}" data-ext="{{ d.filename.rsplit('.',1)[-1].lower() }}">View</button>
+        <a class="doc-btn doc-download-btn" href="/api/document/{{ d.id }}" download="{{ d.filename | e }}">Download</a>
+        <button class="doc-delete" data-id="{{ d.id }}" title="Delete document">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% if not documents %}
+    <p class="no-meetings" id="no-docs">No documents uploaded yet.</p>
+    {% endif %}
+    <span id="doc-status" class="doc-status"></span>
+  </div>
+
+  <!-- ── Pictures (shown together with Documents) ── -->
+  <div class="pictures-pane person-section" data-section="documents" hidden>
+    <div class="documents-heading">
+      <h2>Pictures <span class="meeting-count" id="pic-count">{{ pictures|length }}</span></h2>
+      <label class="doc-upload-label" title="Upload picture or screenshot">
+        + Upload
+        <input type="file" id="pic-input" hidden multiple
+               accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/heic,image/heif,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic,.heif">
+      </label>
+    </div>
+
+    <div class="pictures-grid" id="pic-grid">
+      {% for p in pictures %}
+      <figure class="pic-item" data-id="{{ p.id }}">
+        <img class="pic-thumb" src="/api/picture/{{ p.id }}" alt="{{ p.filename | e }}" loading="lazy"
+             data-id="{{ p.id }}" data-name="{{ p.filename | e }}">
+        <button class="pic-delete" data-id="{{ p.id }}" title="Delete picture">✕</button>
+      </figure>
+      {% endfor %}
+    </div>
+    {% if not pictures %}
+    <p class="no-meetings" id="no-pics">No pictures yet. Tip: you can also paste a screenshot here with Ctrl+V.</p>
+    {% endif %}
+    <span id="pic-status" class="doc-status"></span>
+  </div>
+
+  </div><!-- end main-panes -->
+  </div><!-- end person-layout -->
+</div>
+
+<script>
+// ── Markdown rendering ────────────────────────────────────────────────────────
+function renderMeeting(details) {
+  const el = details.querySelector('.meeting-content');
+  if (el && !el.dataset.rendered) {
+    el.innerHTML = marked.parse(el.dataset.md || '');
+    el.dataset.rendered = '1';
+  }
+}
+document.querySelectorAll('.meeting-item').forEach(details => {
+  if (details.open) renderMeeting(details);
+  details.addEventListener('toggle', () => renderMeeting(details));
+});
+
+// ── Edit person modal ─────────────────────────────────────────────────────────
+const editBackdrop = document.getElementById('edit-backdrop');
+const editName     = document.getElementById('edit-name');
+const editCat      = document.getElementById('edit-category');
+const editDetails  = document.getElementById('edit-details');
+const editProfile  = document.getElementById('edit-profile');
+const editSave     = document.getElementById('edit-save');
+const editCancel   = document.getElementById('edit-cancel');
+const editStatus   = document.getElementById('edit-status');
+const displayName  = document.getElementById('display-name');
+const displayBadge = document.getElementById('display-badge');
+const detailsView  = document.getElementById('details-view');
+const profileView  = document.getElementById('profile-view');
+
+// Render sidebar markdown on page load
+detailsView.innerHTML = marked.parse(detailsView.dataset.raw || '');
+profileView.innerHTML = marked.parse(profileView.dataset.raw || '');
+
+document.getElementById('btn-edit-person').addEventListener('click', () => {
+  editBackdrop.hidden = false;
+  editName.focus();
+  editName.select();
+});
+
+function closeEditModal() {
+  editBackdrop.hidden = true;
+  editStatus.textContent = '';
+}
+
+editCancel.addEventListener('click', closeEditModal);
+editBackdrop.addEventListener('click', e => { if (e.target === editBackdrop) closeEditModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEditModal(); });
+
+editSave.addEventListener('click', async () => {
+  const newName    = editName.value.trim();
+  const newCat     = editCat.value;
+  const newDetails = editDetails.value;
+  const newProfile = editProfile.value;
+  if (!newName) { editStatus.textContent = 'Name cannot be empty.'; return; }
+  editSave.disabled = true;
+  editStatus.textContent = 'Saving…';
+
+  const results = await Promise.all([
+    fetch('/api/person/{{ person.id }}', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'name', content: newName }),
+    }),
+    fetch('/api/person/{{ person.id }}', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'category', content: newCat }),
+    }),
+    fetch('/api/person/{{ person.id }}', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'details', content: newDetails }),
+    }),
+    fetch('/api/person/{{ person.id }}', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'profile', content: newProfile }),
+    }),
+  ]);
+
+  if (results.some(r => !r.ok)) {
+    editStatus.textContent = '✗ Error saving';
+    editSave.disabled = false;
+    return;
+  }
+
+  // Update sidebar display — colour palette must match Python's _PALETTE
+  const palette = ["#4f46e5","#7c3aed","#db2777","#dc2626","#d97706","#059669",
+                   "#0284c7","#0891b2","#7c2d12","#166534","#1e3a5f","#4a044e"];
+  const hashColor = s => palette[Math.abs([...s].reduce((h,c) => Math.imul(31,h)+c.charCodeAt(0)|0, 0)) % palette.length];
+
+  displayName.textContent = newName;
+  displayBadge.textContent = newCat;
+  displayBadge.style.background = hashColor(newCat);
+  document.title = newName + ' · People Manager';
+
+  detailsView.dataset.raw = newDetails;
+  detailsView.innerHTML = marked.parse(newDetails);
+  profileView.dataset.raw = newProfile;
+  profileView.innerHTML = marked.parse(newProfile);
+
+  closeEditModal();
+  editSave.disabled = false;
+});
+
+// ── Photo upload ──────────────────────────────────────────────────────────────
+const photoInput = document.getElementById('photo-input');
+const statusEl   = document.getElementById('upload-status');
+
+photoInput.addEventListener('change', async () => {
+  const file = photoInput.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  statusEl.textContent = 'Uploading…';
+  const res = await fetch('/api/photo/{{ person.id }}', { method: 'POST', body: fd });
+  if (res.ok) {
+    statusEl.textContent = '✓ Saved';
+    const img = document.getElementById('avatar-img');
+    const url = '/api/photo/{{ person.id }}?t=' + Date.now();
+    if (img.tagName === 'IMG') {
+      img.src = url;
+    } else {
+      const newImg = document.createElement('img');
+      newImg.className = 'avatar-lg';
+      newImg.id = 'avatar-img';
+      newImg.src = url;
+      newImg.alt = '{{ person.name }}';
+      img.replaceWith(newImg);
+    }
+    setTimeout(() => statusEl.textContent = '', 2000);
+  } else {
+    statusEl.textContent = '✗ Upload error';
+  }
+});
+
+const removeBtn = document.getElementById('btn-remove');
+if (removeBtn) {
+  removeBtn.addEventListener('click', async () => {
+    if (!await confirmDialog({ title: 'Remove photo?', message: 'The current photo will be removed.', confirmLabel: 'Remove', danger: true })) return;
+    const res = await fetch('/api/photo/{{ person.id }}', { method: 'DELETE' });
+    if (res.ok) location.reload();
+  });
+}
+
+// ── New meeting form ──────────────────────────────────────────────────────────
+const btnNew    = document.getElementById('btn-new-meeting');
+const form      = document.getElementById('new-meeting-form');
+const nmDate    = document.getElementById('nm-date');
+const nmTitle   = document.getElementById('nm-title');
+const nmContent = document.getElementById('nm-content');
+const nmSave    = document.getElementById('nm-save');
+const nmCancel  = document.getElementById('nm-cancel');
+const nmStatus  = document.getElementById('nm-status');
+
+// Default title whenever date changes
+function updateDefaultTitle() {
+  if (!nmTitle.value || nmTitle.dataset.auto === '1') {
+    nmTitle.value = nmDate.value + ' - Conversation with {{ person.name }}';
+    nmTitle.dataset.auto = '1';
+  }
+}
+nmDate.addEventListener('change', updateDefaultTitle);
+nmTitle.addEventListener('input', () => { nmTitle.dataset.auto = '0'; });
+
+btnNew.addEventListener('click', () => {
+  form.hidden = false;
+  btnNew.hidden = true;
+  updateDefaultTitle();
+  nmContent.focus();
+});
+
+nmCancel.addEventListener('click', () => {
+  form.hidden = true;
+  btnNew.hidden = false;
+  nmTitle.value = '';
+  nmTitle.dataset.auto = '0';
+  nmContent.value = '';
+  nmStatus.textContent = '';
+});
+
+nmSave.addEventListener('click', async () => {
+  const title = nmTitle.value.trim();
+  if (!title) { nmStatus.textContent = 'Please enter a title.'; return; }
+  nmSave.disabled = true;
+  nmStatus.textContent = 'Saving…';
+
+  const res = await fetch('/api/meeting/{{ person.id }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title,
+      content: nmContent.value,
+      date: nmDate.value || null,
+    }),
+  });
+
+  if (!res.ok) {
+    nmStatus.textContent = '✗ Error saving';
+    nmSave.disabled = false;
+    return;
+  }
+
+  const { id } = await res.json();
+
+  // Build and inject the new meeting item into the DOM
+  const list = document.getElementById('meetings-list') || (() => {
+    const l = document.createElement('div');
+    l.id = 'meetings-list';
+    l.className = 'meetings-list';
+    document.getElementById('no-meetings')?.remove();
+    form.insertAdjacentElement('afterend', l);
+    return l;
+  })();
+
+  const details = document.createElement('details');
+  details.className = 'meeting-item';
+  details.dataset.dbId = id;
+  details.open = true;
+  const dateLabel = nmDate.value
+    ? new Date(nmDate.value + 'T00:00:00').toLocaleDateString('nl-NL', { day:'2-digit', month:'short', year:'numeric' })
+    : '';
+  details.innerHTML = `
+    <summary class="meeting-summary">
+      <span class="meeting-title">${title}</span>
+      <span class="meeting-summary-right">
+        ${dateLabel ? `<span class="meeting-date">${dateLabel}</span>` : ''}
+        <button class="btn-delete-meeting" data-id="${id}" title="Delete this conversation">🗑</button>
+      </span>
+    </summary>
+    <div class="meeting-content md-content" data-md="${nmContent.value.replace(/"/g,'&quot;')}"></div>`;
+
+  list.prepend(details);
+  renderMeeting(details);
+  wireDeleteBtn(details.querySelector('.btn-delete-meeting'));
+
+  // Update counter
+  const counter = document.getElementById('meeting-count');
+  counter.textContent = parseInt(counter.textContent) + 1;
+
+  // Reset form
+  nmCancel.click();
+  nmSave.disabled = false;
+});
+
+// ── Delete meeting ────────────────────────────────────────────────────────────
+function wireDeleteBtn(btn) {
+  btn.addEventListener('click', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!await confirmDialog({ title: 'Delete conversation?', message: 'This conversation will be permanently deleted.', confirmLabel: 'Delete', danger: true })) return;
+    const mid = btn.dataset.id;
+    const res = await fetch(`/api/meeting/${mid}`, { method: 'DELETE' });
+    if (!res.ok) return;
+    const item = btn.closest('.meeting-item');
+    item.remove();
+    const counter = document.getElementById('meeting-count');
+    counter.textContent = parseInt(counter.textContent) - 1;
+  });
+}
+document.querySelectorAll('.btn-delete-meeting').forEach(wireDeleteBtn);
+
+// ── Taken (tasks) ────────────────────────────────────────────────────────────
+const taskList     = document.getElementById('task-list');
+const taskInput    = document.getElementById('task-input');
+const taskAddBtn   = document.getElementById('task-add-btn');
+const taskCountEl  = document.getElementById('task-count');
+
+function reorderTasks() {
+  const items = Array.from(taskList.querySelectorAll('.task-item'));
+  items.sort((a, b) => (a.dataset.done === 'true') - (b.dataset.done === 'true'));
+  items.forEach(el => taskList.appendChild(el));
+}
+
+function wireTask(li) {
+  const check  = li.querySelector('.task-check');
+  const delBtn = li.querySelector('.task-delete');
+  const id     = li.dataset.id;
+
+  check.addEventListener('change', async () => {
+    const done = check.checked;
+    await fetch(`/api/task/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done }),
+    });
+    li.dataset.done = done ? 'true' : 'false';
+    li.classList.toggle('task-done', done);
+    reorderTasks();
+  });
+
+  delBtn.addEventListener('click', async () => {
+    await fetch(`/api/task/${id}`, { method: 'DELETE' });
+    li.remove();
+    taskCountEl.textContent = parseInt(taskCountEl.textContent) - 1;
+  });
+}
+
+document.querySelectorAll('.task-item').forEach(wireTask);
+
+async function addTask() {
+  const text = taskInput.value.trim();
+  if (!text) return;
+  taskAddBtn.disabled = true;
+  const res = await fetch('/api/task/{{ person.id }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) { taskAddBtn.disabled = false; return; }
+  const { id } = await res.json();
+
+  const li = document.createElement('li');
+  li.className = 'task-item';
+  li.dataset.id   = id;
+  li.dataset.done = 'false';
+  li.innerHTML = `
+    <label class="task-label">
+      <input type="checkbox" class="task-check">
+      <span class="task-text">${text.replace(/</g,'&lt;')}</span>
+    </label>
+    <button class="task-delete" title="Delete task">✕</button>`;
+  taskList.appendChild(li);
+  wireTask(li);
+  reorderTasks();
+
+  taskInput.value = '';
+  taskAddBtn.disabled = false;
+  taskCountEl.textContent = parseInt(taskCountEl.textContent) + 1;
+  taskInput.focus();
+}
+
+taskAddBtn.addEventListener('click', addTask);
+taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+
+// ── Delete person ─────────────────────────────────────────────────────────────
+document.getElementById('btn-delete-person').addEventListener('click', async () => {
+  if (!await confirmDialog({ title: 'Remove person?', message: 'Remove {{ person.name }} from the overview? All notes, conversations and photos will be deleted.', confirmLabel: 'Remove', danger: true })) return;
+  const res = await fetch('/api/person/{{ person.id }}', { method: 'DELETE' });
+  if (res.ok) window.location.href = '/';
+});
+
+// ── Notes ─────────────────────────────────────────────────────────────────────
+const noteCountEl = document.getElementById('note-count');
+
+function buildNoteItem(id, content, dateIso) {
+  const dateLabel = dateIso
+    ? new Date(dateIso + 'T00:00:00').toLocaleDateString('nl-NL', { day:'2-digit', month:'short', year:'numeric' })
+    : '—';
+  const details = document.createElement('details');
+  details.className = 'note-item';
+  details.dataset.id = String(id);
+  details.open = true;
+  details.innerHTML = `
+    <summary class="note-summary">
+      <span class="note-summary-left">
+        <span class="note-date-badge"></span>
+        <span class="note-preview"></span>
+      </span>
+      <button class="btn-delete-note" data-id="${id}" title="Delete note">🗑</button>
+    </summary>
+    <div class="note-body">
+      <div class="note-view">
+        <div class="note-text"></div>
+        <button class="btn-note-edit">✏ Edit</button>
+      </div>
+      <div class="note-edit" hidden>
+        <input type="date" class="note-edit-date" value="${dateIso || ''}">
+        <textarea class="note-edit-textarea"></textarea>
+        <div class="form-actions">
+          <button class="btn-save note-save-btn">Save</button>
+          <button class="btn-cancel note-cancel-btn">Cancel</button>
+          <span class="note-edit-status"></span>
+        </div>
+      </div>
+    </div>`;
+  details.querySelector('.note-date-badge').textContent = dateLabel;
+  details.querySelector('.note-preview').textContent = content.split('\n')[0].slice(0, 80);
+  details.querySelector('.note-text').textContent = content;
+  details.querySelector('.note-edit-textarea').value = content;
+  return details;
+}
+
+function wireNote(details) {
+  const id = details.dataset.id;
+
+  // Delete
+  const delBtn = details.querySelector('.btn-delete-note');
+  delBtn.addEventListener('click', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!await confirmDialog({ title: 'Delete note?', message: 'This note will be permanently deleted.', confirmLabel: 'Delete', danger: true })) return;
+    const res = await fetch(`/api/note/${id}`, { method: 'DELETE' });
+    if (!res.ok) return;
+    details.remove();
+    const newCount = parseInt(noteCountEl.textContent) - 1;
+    noteCountEl.textContent = newCount;
+    if (newCount === 0) {
+      const p = document.createElement('p');
+      p.id = 'no-notes';
+      p.className = 'no-meetings';
+      p.textContent = 'No notes yet.';
+      document.getElementById('notes-list').insertAdjacentElement('afterend', p);
+    }
+  });
+
+  // Edit / Save / Cancel
+  const noteView  = details.querySelector('.note-view');
+  const noteEdit  = details.querySelector('.note-edit');
+  const editBtn   = details.querySelector('.btn-note-edit');
+  const saveBtn   = details.querySelector('.note-save-btn');
+  const cancelBtn = details.querySelector('.note-cancel-btn');
+  const statusEl  = details.querySelector('.note-edit-status');
+  const dateInput = details.querySelector('.note-edit-date');
+  const textarea  = details.querySelector('.note-edit-textarea');
+  const noteText  = details.querySelector('.note-text');
+
+  editBtn.addEventListener('click', () => {
+    textarea.value = noteText.textContent;
+    noteView.hidden = true;
+    noteEdit.hidden = false;
+    textarea.focus();
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    noteView.hidden = false;
+    noteEdit.hidden = true;
+    statusEl.textContent = '';
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const content = textarea.value.trim();
+    if (!content) { statusEl.textContent = 'Note cannot be empty.'; return; }
+    saveBtn.disabled = true;
+    statusEl.textContent = 'Saving…';
+
+    const res = await fetch(`/api/note/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, date: dateInput.value || null }),
+    });
+
+    if (!res.ok) {
+      statusEl.textContent = '✗ Error saving';
+      saveBtn.disabled = false;
+      return;
+    }
+
+    noteText.textContent = content;
+    details.querySelector('.note-preview').textContent = content.split('\n')[0].slice(0, 80);
+    const dateLabel = dateInput.value
+      ? new Date(dateInput.value + 'T00:00:00').toLocaleDateString('nl-NL', { day:'2-digit', month:'short', year:'numeric' })
+      : '—';
+    details.querySelector('.note-date-badge').textContent = dateLabel;
+
+    noteView.hidden = false;
+    noteEdit.hidden = true;
+    statusEl.textContent = '';
+    saveBtn.disabled = false;
+  });
+}
+
+document.querySelectorAll('.note-item').forEach(wireNote);
+
+// New note form
+const btnNewNote  = document.getElementById('btn-new-note');
+const newNoteForm = document.getElementById('new-note-form');
+const nnDate      = document.getElementById('nn-date');
+const nnContent   = document.getElementById('nn-content');
+const nnSave      = document.getElementById('nn-save');
+const nnCancel    = document.getElementById('nn-cancel');
+const nnStatus    = document.getElementById('nn-status');
+
+btnNewNote.addEventListener('click', () => {
+  newNoteForm.hidden = false;
+  btnNewNote.hidden = true;
+  nnContent.focus();
+});
+
+nnCancel.addEventListener('click', () => {
+  newNoteForm.hidden = true;
+  btnNewNote.hidden = false;
+  nnContent.value = '';
+  nnStatus.textContent = '';
+});
+
+nnSave.addEventListener('click', async () => {
+  const content = nnContent.value.trim();
+  if (!content) { nnStatus.textContent = 'Please enter a note.'; return; }
+  nnSave.disabled = true;
+  nnStatus.textContent = 'Saving…';
+
+  const res = await fetch('/api/note/{{ person.id }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, date: nnDate.value || null }),
+  });
+
+  if (!res.ok) {
+    nnStatus.textContent = '✗ Error saving';
+    nnSave.disabled = false;
+    return;
+  }
+
+  const { id } = await res.json();
+
+  let notesList = document.getElementById('notes-list');
+  document.getElementById('no-notes')?.remove();
+
+  const details = buildNoteItem(id, content, nnDate.value);
+  notesList.prepend(details);
+  wireNote(details);
+
+  noteCountEl.textContent = parseInt(noteCountEl.textContent) + 1;
+  nnCancel.click();
+  nnSave.disabled = false;
+});
+
+// ── Documents ─────────────────────────────────────────────────────────────────
+const docInput   = document.getElementById('doc-input');
+const docList    = document.getElementById('doc-list');
+const docCountEl = document.getElementById('doc-count');
+const docStatus  = document.getElementById('doc-status');
+
+function docIcon(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['xls','xlsx','ods','csv'].includes(ext))  return '📊';
+  if (['doc','docx','odt','rtf'].includes(ext))  return '📝';
+  if (['ppt','pptx','odp'].includes(ext))        return '📑';
+  if (ext === 'pdf')                             return '📋';
+  return '📄';
+}
+
+const TEXT_PREVIEW_EXTS = new Set(['txt','md','log','csv','json','xml','yaml','yml','rtf']);
+
+function buildDocItem(id, filename, sizeHuman, dateLabel) {
+  const div = document.createElement('div');
+  div.className = 'doc-item';
+  div.dataset.id = id;
+  const safe = filename.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const ext = filename.split('.').pop().toLowerCase();
+  div.innerHTML = `
+    <span class="doc-icon">${docIcon(filename)}</span>
+    <span class="doc-name">${safe}</span>
+    <span class="doc-meta">${sizeHuman} · ${dateLabel}</span>
+    <button class="doc-btn doc-view-btn" data-id="${id}" data-name="${safe}" data-ext="${ext}">View</button>
+    <a class="doc-btn doc-download-btn" href="/api/document/${id}" download="${safe}">Download</a>
+    <button class="doc-delete" data-id="${id}" title="Delete document">✕</button>`;
+  wireDocView(div.querySelector('.doc-view-btn'));
+  wireDocDelete(div.querySelector('.doc-delete'));
+  return div;
+}
+
+// ── Document preview modal ────────────────────────────────────────────────────
+const docPreviewBackdrop  = document.getElementById('doc-preview-backdrop');
+const docPreviewTitle     = document.getElementById('doc-preview-title');
+const docPreviewBody      = document.getElementById('doc-preview-body');
+const docPreviewDownload  = document.getElementById('doc-preview-download');
+
+document.getElementById('doc-preview-close').addEventListener('click', () => {
+  docPreviewBackdrop.hidden = true;
+  docPreviewBody.innerHTML = '';
+});
+docPreviewBackdrop.addEventListener('click', e => {
+  if (e.target === docPreviewBackdrop) {
+    docPreviewBackdrop.hidden = true;
+    docPreviewBody.innerHTML = '';
+  }
+});
+
+async function wireDocView(btn) {
+  btn.addEventListener('click', async () => {
+    const id   = btn.dataset.id;
+    const name = btn.dataset.name;
+    const ext  = btn.dataset.ext;
+    docPreviewTitle.textContent = name;
+    docPreviewDownload.href = `/api/document/${id}`;
+    docPreviewDownload.download = name;
+    docPreviewBody.innerHTML = '<p class="doc-preview-loading">Loading…</p>';
+    docPreviewBackdrop.hidden = false;
+
+    if (ext === 'pdf') {
+      docPreviewBody.innerHTML = `<iframe src="/api/document/${id}/preview" title="${name.replace(/"/g,'&quot;')}"></iframe>`;
+      return;
+    }
+
+    if (TEXT_PREVIEW_EXTS.has(ext)) {
+      const res = await fetch(`/api/document/${id}/preview`);
+      if (!res.ok) { docPreviewBody.innerHTML = '<p class="doc-preview-unavailable">Could not load file.</p>'; return; }
+      const text = await res.text();
+      if (ext === 'md') {
+        const div = document.createElement('div');
+        div.className = 'md-content doc-preview-md';
+        div.innerHTML = marked.parse(text);
+        docPreviewBody.innerHTML = '';
+        docPreviewBody.appendChild(div);
+      } else {
+        const pre = document.createElement('pre');
+        pre.textContent = text;
+        docPreviewBody.innerHTML = '';
+        docPreviewBody.appendChild(pre);
+      }
+      return;
+    }
+
+    docPreviewBody.innerHTML = '<p class="doc-preview-unavailable">Preview not available for this file type.<br>Use Download to open the file.</p>';
+  });
+}
+
+function wireDocDelete(btn) {
+  btn.addEventListener('click', async () => {
+    if (!await confirmDialog({ title: 'Delete document?', message: `Delete "${btn.closest('.doc-item').querySelector('.doc-name').textContent}"?`, confirmLabel: 'Delete', danger: true })) return;
+    const res = await fetch(`/api/document/${btn.dataset.id}`, { method: 'DELETE' });
+    if (!res.ok) return;
+    btn.closest('.doc-item').remove();
+    const n = parseInt(docCountEl.textContent) - 1;
+    docCountEl.textContent = n;
+    if (n === 0) {
+      const p = document.createElement('p');
+      p.id = 'no-docs'; p.className = 'no-meetings';
+      p.textContent = 'No documents uploaded yet.';
+      docList.insertAdjacentElement('afterend', p);
+    }
+  });
+}
+
+document.querySelectorAll('.doc-view-btn').forEach(wireDocView);
+document.querySelectorAll('.doc-delete').forEach(wireDocDelete);
+
+docInput.addEventListener('change', async () => {
+  const files = Array.from(docInput.files);
+  if (!files.length) return;
+  docStatus.textContent = 'Uploading…';
+  let uploaded = 0;
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/document/{{ person.id }}', { method: 'POST', body: fd });
+    if (!res.ok) {
+      docStatus.textContent = `✗ ${file.name}: file type not allowed`;
+      continue;
+    }
+    const { id } = await res.json();
+    document.getElementById('no-docs')?.remove();
+    const now = new Date().toLocaleDateString('nl-NL', { day:'2-digit', month:'short', year:'numeric' });
+    const size = file.size < 1024 ? `${file.size} B`
+               : file.size < 1048576 ? `${(file.size/1024).toFixed(0)} KB`
+               : `${(file.size/1048576).toFixed(1)} MB`;
+    docList.prepend(buildDocItem(id, file.name, size, now));
+    docCountEl.textContent = parseInt(docCountEl.textContent) + 1;
+    uploaded++;
+  }
+  docInput.value = '';
+  if (uploaded) docStatus.textContent = `✓ ${uploaded} file${uploaded > 1 ? 's' : ''} uploaded`;
+  setTimeout(() => docStatus.textContent = '', 3000);
+});
+
+// ── Pictures ──────────────────────────────────────────────────────────────────
+const picInput    = document.getElementById('pic-input');
+const picGrid     = document.getElementById('pic-grid');
+const picCountEl  = document.getElementById('pic-count');
+const picStatus   = document.getElementById('pic-status');
+const picLightbox = document.getElementById('pic-lightbox');
+const picLbImg    = document.getElementById('pic-lightbox-img');
+const picLbName   = document.getElementById('pic-lightbox-name');
+const picLbDl     = document.getElementById('pic-lightbox-download');
+
+function openLightbox(id, name) {
+  picLbImg.src = '/api/picture/' + id;
+  picLbName.textContent = name;
+  picLbDl.href = '/api/picture/' + id;
+  picLbDl.download = name;
+  picLightbox.hidden = false;
+}
+function closeLightbox() { picLightbox.hidden = true; picLbImg.src = ''; }
+document.getElementById('pic-lightbox-close').addEventListener('click', closeLightbox);
+picLightbox.addEventListener('click', e => { if (e.target === picLightbox) closeLightbox(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !picLightbox.hidden) closeLightbox(); });
+
+function wirePicThumb(img) {
+  img.addEventListener('click', () => openLightbox(img.dataset.id, img.dataset.name));
+}
+function wirePicDelete(btn) {
+  btn.addEventListener('click', async () => {
+    if (!await confirmDialog({ title: 'Delete picture?', message: 'This picture will be permanently deleted.', confirmLabel: 'Delete', danger: true })) return;
+    const res = await fetch(`/api/picture/${btn.dataset.id}`, { method: 'DELETE' });
+    if (!res.ok) return;
+    btn.closest('.pic-item').remove();
+    const n = parseInt(picCountEl.textContent) - 1;
+    picCountEl.textContent = n;
+    if (n === 0) {
+      const p = document.createElement('p');
+      p.id = 'no-pics'; p.className = 'no-meetings';
+      p.textContent = 'No pictures yet. Tip: you can also paste a screenshot here with Ctrl+V.';
+      picGrid.insertAdjacentElement('afterend', p);
+    }
+  });
+}
+function buildPicItem(id, name) {
+  const fig = document.createElement('figure');
+  fig.className = 'pic-item'; fig.dataset.id = id;
+  const safe = (name || 'screenshot.png').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  fig.innerHTML =
+    `<img class="pic-thumb" src="/api/picture/${id}" alt="${safe}" loading="lazy" data-id="${id}" data-name="${safe}">` +
+    `<button class="pic-delete" data-id="${id}" title="Delete picture">✕</button>`;
+  wirePicThumb(fig.querySelector('.pic-thumb'));
+  wirePicDelete(fig.querySelector('.pic-delete'));
+  return fig;
+}
+document.querySelectorAll('.pic-thumb').forEach(wirePicThumb);
+document.querySelectorAll('.pic-delete').forEach(wirePicDelete);
+
+async function uploadPictures(files) {
+  if (!files.length) return;
+  picStatus.textContent = 'Uploading…';
+  let uploaded = 0;
+  for (const file of files) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/picture/{{ person.id }}', { method: 'POST', body: fd });
+    if (!res.ok) { picStatus.textContent = `✗ ${file.name || 'image'}: not an allowed image`; continue; }
+    const { id } = await res.json();
+    document.getElementById('no-pics')?.remove();
+    picGrid.prepend(buildPicItem(id, file.name || 'screenshot.png'));
+    picCountEl.textContent = parseInt(picCountEl.textContent) + 1;
+    uploaded++;
+  }
+  if (uploaded) picStatus.textContent = `✓ ${uploaded} picture${uploaded > 1 ? 's' : ''} added`;
+  setTimeout(() => picStatus.textContent = '', 3000);
+}
+
+picInput.addEventListener('change', () => { uploadPictures(Array.from(picInput.files)); picInput.value = ''; });
+
+// Paste a screenshot straight from the clipboard (Ctrl+V) — unless typing in a field.
+document.addEventListener('paste', e => {
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+  const imgs = Array.from(e.clipboardData?.items || [])
+    .filter(it => it.type.startsWith('image/'))
+    .map(it => it.getAsFile())
+    .filter(Boolean);
+  if (imgs.length) { e.preventDefault(); uploadPictures(imgs); }
+});
+
+// ── Section views ─────────────────────────────────────────────────────────────
+// The page shows one section at a time, chosen from the sidebar: the person page
+// itself shows Conversations; #tasks / #notes / #documents show those sections
+// (Documents shows documents + pictures together).
+const SECTION_PANES = Array.from(document.querySelectorAll('.person-section'));
+const VALID_SECTIONS = ['conversations', 'tasks', 'notes', 'documents'];
+function showSection(name) {
+  if (!VALID_SECTIONS.includes(name)) name = 'conversations';
+  SECTION_PANES.forEach(el => { el.hidden = el.dataset.section !== name; });
+  document.querySelector('.app-main')?.scrollTo(0, 0);
+}
+showSection(decodeURIComponent(location.hash.slice(1)));
+window.addEventListener('hashchange', () => showSection(decodeURIComponent(location.hash.slice(1))));
+</script>
+{% endblock %}

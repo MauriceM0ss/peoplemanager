@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset PIN · People Manager</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script>(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('pv-theme')||'classic');}catch(e){document.documentElement.setAttribute('data-theme','classic');}})();</script>
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">⚠️</div>
+    <h1 class="auth-title">Reset PIN</h1>
+    <p class="auth-subtitle">
+      If you have forgotten your PIN, you can reset the app.<br>
+      <strong>Warning: all saved data will be permanently deleted.</strong><br>
+      Photos, conversations and tasks cannot be recovered.
+    </p>
+
+    {% if error %}
+    <p class="auth-error">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('auth.reset_confirm') }}" class="auth-form">
+      <p class="auth-hint" style="margin-bottom:12px">
+        Type <strong>RESET</strong> to confirm:
+      </p>
+      <input type="text" name="confirm" class="auth-input" placeholder="RESET"
+             autofocus autocomplete="off">
+      <button type="submit" class="btn-save auth-btn btn-danger-full">
+        Delete everything &amp; reset
+      </button>
+    </form>
+
+    <p class="auth-hint auth-hint-small"><a href="{{ url_for('auth.lock_screen') }}">← Back to login</a></p>
+  </div>
+</body>
+</html>
