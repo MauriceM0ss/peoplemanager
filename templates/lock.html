@@ -6,7 +6,7 @@
   <title>Locked · People Manager</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script>(function(){try{document.documentElement.setAttribute('data-theme',localStorage.getItem('pv-theme')||'classic');}catch(e){document.documentElement.setAttribute('data-theme','classic');}})();</script>
+  <script>(function(){try{var t=localStorage.getItem('pv-theme')||'neon';if(t==='blue')t='classic';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','neon');}})();</script>
 </head>
 <body class="auth-page">
   <div class="auth-card">
