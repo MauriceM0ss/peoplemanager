@@ -12,6 +12,7 @@
     (function () {
       try {
         var t = localStorage.getItem('pv-theme') || 'neon';
+        if (t === 'blue') t = 'classic';   // migrate the old theme name
         document.documentElement.setAttribute('data-theme', t);
       } catch (e) {
         document.documentElement.setAttribute('data-theme', 'neon');
@@ -67,7 +68,8 @@
           <label class="settings-field">Theme
             <select id="theme-select">
               <option value="neon">Neon — dark terminal</option>
-              <option value="blue">Classic — deep blue</option>
+              <option value="classic">Classic — blue</option>
+              <option value="github">GitHub — dark</option>
               <option value="light">Light</option>
             </select>
           </label>
@@ -153,7 +155,7 @@
         <ul class="help-points">
           <li><strong>Markdown</strong> works in Key details, Profile, conversation notes and notes.</li>
           <li>Use <strong>☰</strong> to collapse the sidebar (desktop) or open it as a drawer (mobile).</li>
-          <li>Switch <strong>themes</strong> (Classic / Neon / Light) in ⚙ Settings → Appearance.</li>
+          <li>Switch <strong>themes</strong> (Neon / Classic / GitHub / Light) in ⚙ Settings → Appearance.</li>
           <li>Organise people with <strong>categories</strong>; rename or add them in Settings.</li>
           <li>Back up regularly via <strong>Settings → Data → Export</strong>.</li>
         </ul>
@@ -205,8 +207,12 @@
   // The <head> applies the saved theme before paint; here we keep the picker in
   // sync, persist changes, and match the browser/PWA chrome colour to the theme.
   const THEME_KEY = 'pv-theme';
-  const THEME_BG = { neon: '#07090b', blue: '#05070e', light: '#eef1f6' };
-  function currentTheme() { return localStorage.getItem(THEME_KEY) || 'neon'; }
+  const THEME_BG = { neon: '#07090b', classic: '#070d18', github: '#0d1117', light: '#eef1f6' };
+  function currentTheme() {
+    let t = localStorage.getItem(THEME_KEY) || 'neon';
+    if (t === 'blue') t = 'classic';   // migrate the old theme name
+    return t;
+  }
   function applyTheme(t) {
     if (!THEME_BG[t]) t = 'neon';
     document.documentElement.setAttribute('data-theme', t);
@@ -303,7 +309,8 @@
   const settingsBackdrop = document.getElementById('settings-backdrop');
   document.getElementById('btn-settings').addEventListener('click', () => { settingsBackdrop.hidden = false; });
   document.getElementById('settings-close').addEventListener('click', () => { settingsBackdrop.hidden = true; });
-  settingsBackdrop.addEventListener('click', e => { if (e.target === settingsBackdrop) settingsBackdrop.hidden = true; });
+  // Deliberately no backdrop-click or Esc handler here: the Settings modal can
+  // only be dismissed with the Close button (unlike the other dialogs).
 
   document.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -319,10 +326,11 @@
   document.getElementById('help-close').addEventListener('click', () => { helpBackdrop.hidden = true; });
   helpBackdrop.addEventListener('click', e => { if (e.target === helpBackdrop) helpBackdrop.hidden = true; });
 
-  // Esc closes the topmost open base-level dialog
+  // Esc closes the topmost open base-level dialog. The Settings modal is
+  // deliberately excluded — it closes only via its Close button.
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    for (const bd of [helpBackdrop, settingsBackdrop, document.getElementById('add-person-backdrop')]) {
+    for (const bd of [helpBackdrop, document.getElementById('add-person-backdrop')]) {
       if (bd && !bd.hidden) { bd.hidden = true; break; }
     }
   });
