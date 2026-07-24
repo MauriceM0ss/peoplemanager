@@ -100,7 +100,12 @@ def create_app() -> Flask:
     def _security_headers(resp):
         # Stop browsers MIME-sniffing served blobs into active content.
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        # Allow embedding only in the CyberDash dashboard (localhost:5173);
+        # frame-ancestors blocks clickjacking from every other origin. This
+        # replaces X-Frame-Options, which can't allow-list a foreign origin.
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "frame-ancestors 'self' http://localhost:5173")
         return resp
 
     @app.context_processor
