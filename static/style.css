@@ -6,11 +6,16 @@ select { -webkit-appearance: none; appearance: none; }
 /* ── Theming ──────────────────────────────────────────────────────────────
    The whole UI is driven by these tokens. A theme is selected by the
    `data-theme` attribute on <html> (set early in base.html to avoid a flash,
-   and switchable from Settings → Appearance). Palettes mirror the SecAnalysis
-   app: neon (default) / classic (deep blue) / github (dark) / light.
-   `--on-accent` is the text colour on an accent-filled surface;
+   and switchable from Settings → Appearance). Palettes are shared with the
+   CyberNewsHub app: neon (default) / blue / light / github / amber.
+   `--on-accent` is the text colour placed on an accent-filled surface;
    `--glow-*` are neon glows that collapse to `none` in the calmer themes.
-   `--header-*` drive the top bar, which is black in every theme. */
+
+   The top bar is black in every theme, so what sits on it can't reuse the body
+   tokens — in the Light theme `--text` and `--accent` are near-black and would
+   vanish. The `--header-*` tokens are that bar's own palette: `--header-text`
+   for the wordmark, `--header-fg` for the subtitle and icon glyphs,
+   `--header-logo` for the `>_` prompt and accented button states. */
 
 :root {
   /* Layout dimensions — independent of the colour theme. */
@@ -19,10 +24,10 @@ select { -webkit-appearance: none; appearance: none; }
   --statusbar-h: 26px;
 }
 
-/* ── Neon — dark terminal (default). ── */
+/* ── Dark Terminal (default). ── */
 :root, [data-theme="neon"] {
   --bg:          #07090b;          /* near-black */
-  --surface:     #0e1114;          /* panels, cards, sidebar */
+  --surface:     #0e1114;          /* panels, cards, header, sidebar */
   --surface2:    #161b20;          /* insets, hovers, code */
   --border:      rgba(120, 140, 150, .14);
   --text:        #e6edf2;
@@ -30,88 +35,60 @@ select { -webkit-appearance: none; appearance: none; }
   --accent:      #39ff14;          /* neon green — primary / active */
   --accent-hi:   #5dff3a;          /* brighter green for hovered text */
   --accent2:     #19f0ff;          /* cyan — passive section labels */
-  --accent-dim:  rgba(57, 255, 20, .15);
+  --accent-dim:  rgba(57, 255, 20, .12);
   --accent-glow: rgba(57, 255, 20, .22);
   --danger:      #ff5563;
   --danger-dim:  rgba(255, 85, 99, .13);
   --success:     #39ff14;
-  --star:        #f5c451;
+  --star:        #ffb13d;
   --on-accent:   #07090b;          /* dark text on the neon fill */
-  --glow-logo:   0 0 18px rgba(57, 255, 20, .45);
+  --glow-logo:   0 0 12px rgba(57, 255, 20, .6);
   --glow-text:   0 0 10px rgba(57, 255, 20, .35);
   --sel-bg:      rgba(57, 255, 20, .28);
   --sel-fg:      #fff;
   --radius:      6px;
   --shadow:      0 16px 50px rgba(0, 0, 0, .55);
-  --header-bg:   #000000;          /* the bar is black in every theme */
-  --header-fg:   #19f0ff;          /* title + icons, on that black */
-  --header-logo: #5dff3a;
+  --header-bg:     #000000;
+  --header-border: rgba(255, 255, 255, .14);
+  --header-text:   #e6edf2;          /* wordmark */
+  --header-fg:     #19f0ff;          /* subtitle */
+  --header-logo:   #39ff14;          /* >_ prompt */
   --font-mono:   "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-head:   "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
   color-scheme: dark;
 }
 
-/* ── Classic — deep-blue dark. ── */
-[data-theme="classic"] {
-  --bg:          #070d18;
-  --surface:     #0c1424;
-  --surface2:    #15233f;
-  --border:      #213a63;
-  --text:        #d6e4f7;
-  --muted:       #8198bd;
+/* ── Deep Blue — the original deep-blue dark theme. ── */
+[data-theme="blue"] {
+  --bg:          #05070e;
+  --surface:     #0a0f1d;
+  --surface2:    #111a30;
+  --border:      #1d2942;
+  --text:        #d3ddf2;
+  --muted:       #5f6c8a;
   --accent:      #3b82f6;
   --accent-hi:   #60a5fa;
-  --accent2:     #8198bd;          /* labels plain muted */
-  --accent-dim:  rgba(59, 130, 246, .15);
+  --accent2:     #5f6c8a;          /* labels were plain muted grey */
+  --accent-dim:  #0f2247;
   --accent-glow: rgba(59, 130, 246, .16);
-  --danger:      #ff7b7b;
-  --danger-dim:  rgba(255, 123, 123, .13);
+  --danger:      #ef4444;
+  --danger-dim:  #3b0f0f;
   --success:     #22c55e;
-  --star:        #f0b429;
-  --on-accent:   #04101f;
-  --glow-logo:   0 0 18px rgba(59, 130, 246, .35);
+  --star:        #fbbf24;
+  --on-accent:   #fff;
+  --glow-logo:   none;
   --glow-text:   none;
   --sel-bg:      rgba(59, 130, 246, .3);
   --sel-fg:      #fff;
   --radius:      10px;
   --shadow:      0 2px 16px rgba(0, 0, 0, .5);
-  --header-bg:   #000000;
-  --header-fg:   #8198bd;
-  --header-logo: #60a5fa;
+  --header-bg:     #000000;
+  --header-border: rgba(255, 255, 255, .14);
+  --header-text:   #d3ddf2;
+  --header-fg:     #8593b0;          /* --accent2 lifted; too dark on black */
+  --header-logo:   #60a5fa;
   --font-mono:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-head:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color-scheme: dark;
-}
-
-/* ── GitHub — dark. ── */
-[data-theme="github"] {
-  --bg:          #0d1117;
-  --surface:     #161b22;
-  --surface2:    #21262d;
-  --border:      #30363d;
-  --text:        #e6edf3;
-  --muted:       #8b949e;
-  --accent:      #2f81f7;
-  --accent-hi:   #58a6ff;
-  --accent2:     #8b949e;          /* labels plain muted */
-  --accent-dim:  rgba(47, 129, 247, .15);
-  --accent-glow: rgba(47, 129, 247, .18);
-  --danger:      #f85149;
-  --danger-dim:  rgba(248, 81, 73, .13);
-  --success:     #3fb950;
-  --star:        #d29922;
-  --on-accent:   #ffffff;
-  --glow-logo:   none;
-  --glow-text:   none;
-  --sel-bg:      rgba(47, 129, 247, .3);
-  --sel-fg:      #ffffff;
-  --radius:      6px;
-  --shadow:      0 8px 24px rgba(1, 4, 9, .5);
-  --header-bg:   #000000;
-  --header-fg:   #8b949e;
-  --header-logo: #58a6ff;
-  --font-mono:   ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-head:   -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   color-scheme: dark;
 }
 
@@ -126,12 +103,12 @@ select { -webkit-appearance: none; appearance: none; }
   --accent:      #2563eb;
   --accent-hi:   #1d4ed8;
   --accent2:     #5c6781;          /* labels muted grey */
-  --accent-dim:  rgba(37, 99, 235, .12);
+  --accent-dim:  #dce8ff;
   --accent-glow: rgba(37, 99, 235, .18);
   --danger:      #dc2626;
   --danger-dim:  #fdecec;
   --success:     #16a34a;
-  --star:        #b45309;
+  --star:        #d97706;
   --on-accent:   #fff;
   --glow-logo:   none;
   --glow-text:   none;
@@ -139,12 +116,85 @@ select { -webkit-appearance: none; appearance: none; }
   --sel-fg:      #0b1220;
   --radius:      10px;
   --shadow:      0 6px 24px rgba(30, 41, 70, .12);
-  --header-bg:   #000000;
-  --header-fg:   #98a2b3;          /* the theme's own muted is too dark on black */
-  --header-logo: #60a5fa;          /* likewise its accent-hi */
+  /* The bar stays black here too, so these are on-black tints — this theme's own
+     --text and --accent are far too dark to read against it. */
+  --header-bg:     #000000;
+  --header-border: rgba(255, 255, 255, .16);
+  --header-text:   #e8ecf3;
+  --header-fg:     #cbd5e1;
+  --header-logo:   #60a5fa;
   --font-mono:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-head:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
+}
+
+/* ── GitHub — Primer dark. ── */
+[data-theme="github"] {
+  --bg:          #0d1117;
+  --surface:     #161b22;
+  --surface2:    #21262d;
+  --border:      #30363d;
+  --text:        #e6edf3;
+  --muted:       #8b949e;
+  --accent:      #2f81f7;
+  --accent-hi:   #58a6ff;
+  --accent2:     #8b949e;          /* labels plain muted */
+  --accent-dim:  rgba(47, 129, 247, .15);
+  --accent-glow: rgba(47, 129, 247, .15);
+  --danger:      #f85149;
+  --danger-dim:  rgba(248, 81, 73, .15);
+  --success:     #2ea043;          /* GitHub green */
+  --star:        #e3b341;          /* Primer attention yellow */
+  --on-accent:   #ffffff;
+  --glow-logo:   none;
+  --glow-text:   none;
+  --sel-bg:      rgba(47, 129, 247, .30);
+  --sel-fg:      #ffffff;
+  --radius:      6px;
+  --shadow:      0 8px 24px rgba(1, 4, 9, .5);
+  --header-bg:     #010409;          /* Primer canvas.inset — near-black */
+  --header-border: #30363d;
+  --header-text:   #e6edf3;
+  --header-fg:     #8b949e;
+  --header-logo:   #58a6ff;
+  --font-mono:   ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-head:   -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+                 Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+
+/* ── Amber. ── */
+[data-theme="amber"] {
+  --bg:          #0d0f14;
+  --surface:     #141820;
+  --surface2:    #1c2130;
+  --border:      #252d3d;
+  --text:        #dde3ef;
+  --muted:       #6b7794;
+  --accent:      #f59e0b;
+  --accent-hi:   #fbbf24;
+  --accent2:     #6b7794;          /* labels plain muted */
+  --accent-dim:  #3d2a00;
+  --accent-glow: rgba(245, 158, 11, .12);
+  --danger:      #ef4444;
+  --danger-dim:  #3b0f0f;
+  --success:     #22c55e;
+  --star:        #fbbf24;
+  --on-accent:   #000;
+  --glow-logo:   none;
+  --glow-text:   none;
+  --sel-bg:      rgba(245, 158, 11, .28);
+  --sel-fg:      #fff;
+  --radius:      10px;
+  --shadow:      0 2px 16px rgba(0, 0, 0, .5);
+  --header-bg:     #000000;
+  --header-border: rgba(255, 255, 255, .14);
+  --header-text:   #dde3ef;
+  --header-fg:     #f0b45f;
+  --header-logo:   #fbbf24;
+  --font-mono:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-head:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
 }
 
 body {
@@ -164,14 +214,14 @@ a { color: inherit; text-decoration: none; }
   position: sticky; top: 0; z-index: 100;
   height: var(--header-h);
   background: var(--header-bg);           /* black in every theme */
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--header-border);
   padding: 0 20px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
 }
 .header-left { display: flex; align-items: center; gap: 10px; }
-.logo { display: flex; align-items: center; gap: 9px; font-family: var(--font-head); font-weight: 700; font-size: 1rem; color: var(--header-logo); letter-spacing: -.01em; }
+.logo { display: flex; align-items: center; gap: 9px; font-family: var(--font-head); font-weight: 700; font-size: 1rem; color: var(--header-text); letter-spacing: -.01em; }
 .logo::before {
   content: ">_"; font-weight: 700; color: var(--header-logo);
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -184,7 +234,7 @@ a { color: inherit; text-decoration: none; }
 }
 .header-actions { display: flex; gap: 8px; justify-self: end; align-items: center; }
 /* Hamburger: a drawer toggle on mobile, a sidebar collapse toggle on desktop. */
-.btn-menu { display: inline-flex; font-size: 1.15rem; }
+.btn-menu { display: inline-flex; }
 
 .btn-icon {
   cursor: pointer; background: none; border: 1px solid var(--border);
@@ -195,11 +245,20 @@ a { color: inherit; text-decoration: none; }
 }
 .btn-icon:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
 .btn-icon.btn-danger-icon:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-dim); }
-/* Header icon buttons sit on the black bar in every theme, so they use the
-   header foreground colour and a translucent-white hover instead of the shared
-   surface hover (which would put dark text on a light chip in the light theme). */
-.site-header .btn-icon { color: var(--header-fg); border-color: rgba(255, 255, 255, .14); }
-.site-header .btn-icon:hover { color: #fff; background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .35); }
+
+/* Top-bar buttons follow the SecAnalysis app: monochrome stroked SVG glyphs in
+   a chrome-free chip — no resting border, no accent outline on hover, and a
+   focus ring instead. The bordered .btn-icon above still serves any in-page
+   icon buttons.
+   These sit on black whatever the theme, so the resting/hover tints are literal
+   on-black values rather than tokens: --muted and --text would put near-black
+   glyphs on a near-white chip in the Light theme. */
+.site-header .btn-icon { color: rgba(230, 237, 242, .62); border-color: transparent; }
+.site-header .btn-icon:hover { background: rgba(255, 255, 255, .1); color: #fff; border-color: transparent; }
+.site-header .btn-icon:focus-visible {
+  outline: none; border-color: var(--header-logo); box-shadow: 0 0 0 3px rgba(255, 255, 255, .14);
+}
+.site-header .btn-icon svg { display: block; }
 
 /* ── Tooltips ────────────────────────────────────────────────────────────── */
 /* Themed, anchored to the element, instead of the unreliable native title bubble. */
@@ -748,7 +807,6 @@ kbd {
 }
 @media (min-width: 761px) {
   .nav-backdrop { display: none; }
-  .btn-menu { font-size: 1.1rem; }
   /* Desktop: the hamburger collapses the sidebar to reclaim width. */
   body.nav-collapsed .nav-sidebar { width: 0; min-width: 0; border-right-color: transparent; overflow: hidden; }
 }
