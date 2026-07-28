@@ -6,13 +6,13 @@
   <title>{% block title %}Home{% endblock %} · People Manager</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <meta name="theme-color" content="#07090b">
+  <meta name="theme-color" content="#000000">
   <!-- Apply the saved theme before the stylesheet paints, so there's no flash. -->
   <script>
     (function () {
       try {
         var t = localStorage.getItem('pv-theme') || 'neon';
-        if (t === 'blue') t = 'classic';   // migrate the old theme name
+        if (t === 'classic') t = 'blue';   // migrate the old theme name
         document.documentElement.setAttribute('data-theme', t);
       } catch (e) {
         document.documentElement.setAttribute('data-theme', 'neon');
@@ -26,24 +26,56 @@
   <!-- ── Header ─────────────────────────────────────────────────────────── -->
   <header class="site-header">
     <div class="header-left">
-      <button class="btn-icon btn-menu" id="btn-menu" aria-label="Toggle menu">☰</button>
+      <button class="btn-icon btn-menu" id="btn-menu" type="button" aria-label="Toggle menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
       <a href="{{ url_for('pages.index') }}" class="logo">
         <span class="logo-text">People</span>
       </a>
     </div>
     <span class="header-title">People Manager</span>
     <div class="header-actions">
-      <button class="btn-icon" id="btn-add-person-header" data-tip="Add person" aria-label="Add person">＋</button>
-      <button class="btn-icon" id="btn-help" data-tip="Help &amp; tips" aria-label="Help and tips">?</button>
+      <button class="btn-icon" id="btn-add-person-header" type="button" data-tip="Add person"
+              aria-label="Add person" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <line x1="19" y1="8" x2="19" y2="14"></line>
+          <line x1="22" y1="11" x2="16" y2="11"></line>
+        </svg>
+      </button>
+      <button class="btn-icon" id="btn-help" type="button" data-tip="Help &amp; tips"
+              aria-label="Help and tips" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </button>
       {% if pin_enabled %}
-      <button class="btn-icon" id="btn-lock" data-tip="Lock now" aria-label="Lock now">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="4" y="11" width="16" height="10" rx="2"></rect>
-          <path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+      <button class="btn-icon" id="btn-lock" type="button" data-tip="Lock now" aria-label="Lock now">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
         </svg>
       </button>
       {% endif %}
-      <button class="btn-icon" id="btn-settings" data-tip="Settings" aria-label="Settings">⚙</button>
+      <button class="btn-icon" id="btn-settings" type="button" data-tip="Settings"
+              aria-label="Settings" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
     </div>
   </header>
 
@@ -67,10 +99,11 @@
           <h3 class="settings-section-title">Appearance</h3>
           <label class="settings-field">Theme
             <select id="theme-select">
-              <option value="neon">Neon — dark terminal</option>
-              <option value="classic">Classic — blue</option>
-              <option value="github">GitHub — dark</option>
+              <option value="neon">Dark Terminal</option>
+              <option value="blue">Deep Blue</option>
               <option value="light">Light</option>
+              <option value="github">GitHub</option>
+              <option value="amber">Amber</option>
             </select>
           </label>
           <p class="settings-desc">Switches the colour scheme instantly. Your choice is remembered in this browser.</p>
@@ -155,7 +188,7 @@
         <ul class="help-points">
           <li><strong>Markdown</strong> works in Key details, Profile, conversation notes and notes.</li>
           <li>Use <strong>☰</strong> to collapse the sidebar (desktop) or open it as a drawer (mobile).</li>
-          <li>Switch <strong>themes</strong> (Neon / Classic / GitHub / Light) in ⚙ Settings → Appearance.</li>
+          <li>Switch <strong>themes</strong> (Dark Terminal / Deep Blue / Light / GitHub / Amber) in ⚙ Settings → Appearance.</li>
           <li>Organise people with <strong>categories</strong>; rename or add them in Settings.</li>
           <li>Back up regularly via <strong>Settings → Data → Export</strong>.</li>
         </ul>
@@ -206,19 +239,24 @@
   // ── Theme switching ───────────────────────────────────────────────────────
   // The <head> applies the saved theme before paint; here we keep the picker in
   // sync, persist changes, and match the browser/PWA chrome colour to the theme.
+  // These mirror each theme's --header-bg, not --bg: the browser chrome sits
+  // directly above the top bar, which is black in every theme.
   const THEME_KEY = 'pv-theme';
-  const THEME_BG = { neon: '#07090b', classic: '#070d18', github: '#0d1117', light: '#eef1f6' };
+  const THEME_HEADER_BG = {
+    neon: '#000000', blue: '#000000', light: '#000000',
+    github: '#010409', amber: '#000000',
+  };
   function currentTheme() {
     let t = localStorage.getItem(THEME_KEY) || 'neon';
-    if (t === 'blue') t = 'classic';   // migrate the old theme name
+    if (t === 'classic') t = 'blue';   // migrate the old theme name
     return t;
   }
   function applyTheme(t) {
-    if (!THEME_BG[t]) t = 'neon';
+    if (!THEME_HEADER_BG[t]) t = 'neon';
     document.documentElement.setAttribute('data-theme', t);
     try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', THEME_BG[t]);
+    if (meta) meta.setAttribute('content', THEME_HEADER_BG[t]);
     const sel = document.getElementById('theme-select');
     if (sel) sel.value = t;
   }
