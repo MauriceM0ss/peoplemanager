@@ -89,6 +89,7 @@
         {% if pin_enabled %}
         <button class="settings-tab" data-tab="security" role="tab">Security</button>
         {% endif %}
+        <button class="settings-tab" data-tab="categories" role="tab">Categories</button>
         <button class="settings-tab" data-tab="data" role="tab">Data</button>
         {% block settings_tabs %}{% endblock %}
       </div>
@@ -121,8 +122,11 @@
               <option value="15" {% if timeout_minutes == 15 %}selected{% endif %}>15 minutes</option>
               <option value="30" {% if timeout_minutes == 30 %}selected{% endif %}>30 minutes</option>
               <option value="60" {% if timeout_minutes == 60 %}selected{% endif %}>60 minutes</option>
+              <option value="0"  {% if timeout_minutes == 0  %}selected{% endif %}>Never</option>
             </select>
           </label>
+          <p class="settings-desc">Choose <strong>Never</strong> to switch auto-lock off entirely — the
+            app then stays unlocked until you press 🔒 Lock now or restart the server.</p>
         </div>
         <div class="settings-section">
           <h3 class="settings-section-title">🔑 PIN</h3>
@@ -140,6 +144,23 @@
         </div>
       </div>
       {% endif %}
+
+      <!-- ── Tab: Categories ──────────────────────────────────────────────── -->
+      <!-- Lives in base.html, not index.html, so categories can be edited from
+           any page — including while a person is open. -->
+      <div class="settings-panel" data-panel="categories" hidden>
+        <div class="settings-section">
+          <h3 class="settings-section-title">🏷 Categories</h3>
+          <p class="settings-desc">Add, rename or delete the categories people are grouped under.
+            Drag a row by its handle — or use ▲ / ▼ — to set the order they appear in the sidebar.</p>
+          <ul class="cats-list" id="cats-list"></ul>
+          <div class="cats-add-row">
+            <input type="text" id="new-cat-input" placeholder="New category…" autocomplete="off">
+            <button class="btn-save" id="new-cat-save">Add</button>
+          </div>
+          <span id="cats-status" class="settings-status"></span>
+        </div>
+      </div>
 
       <!-- ── Tab: Data ────────────────────────────────────────────────────── -->
       <div class="settings-panel" data-panel="data" hidden>
@@ -189,7 +210,10 @@
           <li><strong>Markdown</strong> works in Key details, Profile, conversation notes and notes.</li>
           <li>Use <strong>☰</strong> to collapse the sidebar (desktop) or open it as a drawer (mobile).</li>
           <li>Switch <strong>themes</strong> (Dark Terminal / Deep Blue / Light / GitHub / Amber) in ⚙ Settings → Appearance.</li>
-          <li>Organise people with <strong>categories</strong>; rename or add them in Settings.</li>
+          <li>Organise people with <strong>categories</strong>: add, rename, delete or reorder them
+              in ⚙ Settings → Categories, from any page.</li>
+          <li><strong>Drag a person</strong> in the sidebar onto another category to move them there.</li>
+          <li>Auto-lock can be set to <strong>Never</strong> in ⚙ Settings → Security.</li>
           <li>Back up regularly via <strong>Settings → Data → Export</strong>.</li>
         </ul>
       </div>
@@ -231,7 +255,7 @@
   <footer class="app-statusbar">
     <span class="status-item"><span class="status-dot"></span> People Manager</span>
     {% if pin_enabled %}
-    <span class="status-item status-spacer">🔒 Auto-locks after {{ timeout_minutes }} min</span>
+    <span class="status-item status-spacer" id="status-autolock">{% if timeout_minutes %}🔒 Auto-locks after {{ timeout_minutes }} min{% else %}🔓 Auto-lock off{% endif %}</span>
     {% endif %}
   </footer>
 
@@ -263,6 +287,18 @@
   applyTheme(currentTheme());   // sync the picker + theme-color on load
   document.getElementById('theme-select')
     .addEventListener('change', e => applyTheme(e.target.value));
+
+  // ── Category / avatar colours ────────────────────────────────────────────
+  // Mirrors peoplecrm/helpers.py: _PALETTE + stable_hash(). Keeping the two in
+  // step lets the browser repaint a badge after an edit without a page reload
+  // and still land on exactly the colour the server would have rendered.
+  const PALETTE = ["#4f46e5","#7c3aed","#db2777","#dc2626","#d97706","#059669",
+                   "#0284c7","#0891b2","#7c2d12","#166534","#1e3a5f","#4a044e"];
+  function hashColor(s) {
+    const h = [...String(s)].reduce((a, c) => (Math.imul(31, a) + c.charCodeAt(0)) | 0, 0);
+    return PALETTE[Math.abs(h) % PALETTE.length];
+  }
+  window.hashColor = hashColor;
 
   // ── Themed dialogs ───────────────────────────────────────────────────────
   // Promise-based, theme-styled replacements for window.confirm/prompt/alert.
@@ -415,6 +451,7 @@
   // active we send a heartbeat to keep the session alive (and detect a lock from
   // another tab / restart); once idle past the timeout we navigate to /lock so no
   // data stays on screen.
+  // 0 = Never: no idle deadline, so the interval below only heartbeats.
   let autoLockMs = {{ timeout_minutes }} * 60 * 1000;
   let lastActivity = Date.now();
   let lastPing = Date.now();
@@ -431,9 +468,9 @@
 
   setInterval(async () => {
     const now = Date.now();
-    if (now - lastActivity >= autoLockMs) { autoLock(); return; }
+    if (autoLockMs > 0 && now - lastActivity >= autoLockMs) { autoLock(); return; }
     // Heartbeat only while genuinely active, so an idle session still expires.
-    if (now - lastActivity < 60000 && now - lastPing >= 60000) {
+    if ((autoLockMs <= 0 || now - lastActivity < 60000) && now - lastPing >= 60000) {
       lastPing = now;
       try {
         const r = await fetch('/api/ping', { method: 'POST' });
@@ -456,11 +493,18 @@
   const timeoutSelect = document.getElementById('timeout-select');
   if (timeoutSelect) {
     timeoutSelect.addEventListener('change', async () => {
+      const minutes = parseInt(timeoutSelect.value);
       await fetch('/api/settings/timeout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ minutes: parseInt(timeoutSelect.value) }),
+        body: JSON.stringify({ minutes }),
       });
+      const statusEl = document.getElementById('status-autolock');
+      if (statusEl) {
+        statusEl.textContent = minutes > 0
+          ? `🔒 Auto-locks after ${minutes} min`
+          : '🔓 Auto-lock off';
+      }
     });
   }
 
@@ -585,20 +629,50 @@
   });
 
   // ── Navigation tree ───────────────────────────────────────────────────────
-  (async () => {
-    const treeEl = document.getElementById('nav-tree');
-    if (!treeEl) return;
+  // Rendered from /api/tree and re-rendered in place (never via a page reload)
+  // whenever a person or a category changes, so an edit shows up immediately.
+  const treeEl = document.getElementById('nav-tree');
 
-    const activePid = window.location.pathname.startsWith('/person/')
-      ? window.location.pathname.slice('/person/'.length)
+  const COLLAPSE_KEY = 'nav-sidebar-collapsed';
+  const PERSON_EXPAND_KEY = 'nav-person-expanded';
+  const PERSON_SECTIONS = [['tasks', 'Tasks'], ['notes', 'Notes'], ['documents', 'Documents']];
+  // Kept outside renderNavTree so expand/collapse survives a re-render.
+  let collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]'));
+  let personExpanded = new Set(JSON.parse(localStorage.getItem(PERSON_EXPAND_KEY) || '[]'));
+
+  // Drag state for "drop a person on a category". Held in a variable rather
+  // than dataTransfer because dragover must decide whether to accept the drop,
+  // and the payload is not readable until the drop itself.
+  let dragPid = null, dragFromCat = null;
+
+  function activePersonId() {
+    return window.location.pathname.startsWith('/person/')
+      ? decodeURIComponent(window.location.pathname.slice('/person/'.length))
       : null;
+  }
 
-    const COLLAPSE_KEY = 'nav-sidebar-collapsed';
-    let collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]'));
+  async function movePersonToCategory(personId, category) {
+    const res = await fetch('/api/person/' + encodeURIComponent(personId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'category', content: category }),
+    });
+    if (!res.ok) {
+      alertDialog({ message: 'Could not move that person to “' + category + '”.' });
+      return false;
+    }
+    // Let whichever page is open repaint its own view of this person.
+    document.dispatchEvent(new CustomEvent('person-category-changed', {
+      detail: { personId, category },
+    }));
+    await renderNavTree();
+    return true;
+  }
+  window.movePersonToCategory = movePersonToCategory;
 
-    const PERSON_EXPAND_KEY = 'nav-person-expanded';
-    let personExpanded = new Set(JSON.parse(localStorage.getItem(PERSON_EXPAND_KEY) || '[]'));
-    const PERSON_SECTIONS = [['tasks', 'Tasks'], ['notes', 'Notes'], ['documents', 'Documents']];
+  async function renderNavTree() {
+    if (!treeEl) return;
+    const activePid = activePersonId();
 
     let data;
     try {
@@ -619,15 +693,38 @@
 
       const catRow = document.createElement('div');
       catRow.className = 'tree-cat-row';
+      catRow.dataset.cat = category;
       catRow.innerHTML =
         `<span class="tree-arrow">${isOpen ? '▾' : '▶'}</span>` +
-        `<span class="tree-cat-label">${category}</span>` +
+        `<span class="tree-cat-label"></span>` +
         `<span class="tree-count">${people.length}</span>`;
+      catRow.querySelector('.tree-cat-label').textContent = category;
       catLi.appendChild(catRow);
 
       const peopleUl = document.createElement('ul');
       peopleUl.className = 'tree-people-list';
       if (!isOpen) peopleUl.hidden = true;
+
+      // ── Drop target: moving a person here re-files them ──────────────────
+      const isDroppable = () => dragPid !== null && dragFromCat !== category;
+      catRow.addEventListener('dragover', e => {
+        if (!isDroppable()) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        catRow.classList.add('drag-over');
+      });
+      catRow.addEventListener('dragleave', () => catRow.classList.remove('drag-over'));
+      catRow.addEventListener('drop', async e => {
+        catRow.classList.remove('drag-over');
+        if (!isDroppable()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const pid = dragPid;
+        dragPid = dragFromCat = null;
+        collapsed.delete(category);            // show where the person landed
+        localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed]));
+        await movePersonToCategory(pid, category);
+      });
 
       for (const p of people) {
         const isActivePerson = p.id === activePid;
@@ -644,6 +741,21 @@
         a.href = '/person/' + p.id;
         a.className = 'tree-person-link';
         a.textContent = p.name;
+        a.draggable = true;
+        a.title = 'Drag onto a category to move ' + p.name;
+        a.addEventListener('dragstart', e => {
+          dragPid = p.id;
+          dragFromCat = category;
+          e.dataTransfer.effectAllowed = 'move';
+          // Firefox refuses to start a drag unless some data is set.
+          e.dataTransfer.setData('text/plain', p.name);
+          li.classList.add('dragging');
+        });
+        a.addEventListener('dragend', () => {
+          dragPid = dragFromCat = null;
+          li.classList.remove('dragging');
+          treeEl.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
 
         // Sub-navigation: Tasks / Notes / Documents → jump to that section.
         const subUl = document.createElement('ul');
@@ -708,27 +820,227 @@
 
     const activeEl = treeEl.querySelector('.tree-person-item.active');
     if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
-
-    // Highlight the sub-link matching the section currently in view.
-    function highlightSubnav() {
-      const h = location.hash.slice(1);
-      treeEl.querySelectorAll('.tree-subnav-link').forEach(l => {
-        l.classList.toggle('active', h !== '' && l.getAttribute('href').endsWith('#' + h));
-      });
-    }
     highlightSubnav();
-    window.addEventListener('hashchange', highlightSubnav);
-  })();
+  }
+  window.refreshNavTree = renderNavTree;
 
-  // Wire optional "Manage categories" button (only present on the index page)
-  const btnCatManage = document.getElementById('btn-cat-manage-settings');
-  if (btnCatManage) {
-    btnCatManage.addEventListener('click', () => {
-      settingsBackdrop.hidden = true;
-      const cb = document.getElementById('cats-backdrop');
-      if (cb) cb.hidden = false;
+  // Highlight the sub-link matching the section currently in view.
+  function highlightSubnav() {
+    if (!treeEl) return;
+    const h = location.hash.slice(1);
+    treeEl.querySelectorAll('.tree-subnav-link').forEach(l => {
+      l.classList.toggle('active', h !== '' && l.getAttribute('href').endsWith('#' + h));
     });
   }
+  window.addEventListener('hashchange', highlightSubnav);
+  renderNavTree();
+
+  // ── Categories manager (Settings → Categories) ────────────────────────────
+  // Reachable from every page, because it lives in base.html. Reordering is
+  // deliberately available only here — not in the sidebar.
+  const catsList   = document.getElementById('cats-list');
+  const catsStatus = document.getElementById('cats-status');
+  const newCatInput = document.getElementById('new-cat-input');
+  const newCatSave  = document.getElementById('new-cat-save');
+  let catDragRow = null;
+
+  function catsNote(msg) {
+    catsStatus.textContent = msg;
+    if (msg) setTimeout(() => { if (catsStatus.textContent === msg) catsStatus.textContent = ''; }, 2500);
+  }
+
+  // Broadcast so the open page can repaint its own category-derived UI.
+  function announceCategories(detail) {
+    document.dispatchEvent(new CustomEvent('categories-changed', { detail: detail || {} }));
+  }
+
+  function catButton(cls, label, title) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cat-btn ' + cls;
+    b.textContent = label;
+    b.title = title;
+    return b;
+  }
+
+  function buildCatRow(name) {
+    const li = document.createElement('li');
+    li.className = 'cat-row';
+    li.dataset.cat = name;
+    li.draggable = true;
+
+    const grip = document.createElement('span');
+    grip.className = 'cat-grip';
+    grip.textContent = '⠿';
+    grip.title = 'Drag to reorder';
+
+    const dot = document.createElement('span');
+    dot.className = 'cat-dot';
+    dot.style.background = hashColor(name);
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'cat-name';
+    nameSpan.textContent = name;
+
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'cat-name-input';
+    nameInput.value = name;
+    nameInput.hidden = true;
+
+    const actions = document.createElement('div');
+    actions.className = 'cat-actions';
+    const upBtn     = catButton('cat-up', '▲', 'Move up');
+    const downBtn   = catButton('cat-down', '▼', 'Move down');
+    const editBtn   = catButton('cat-edit', '✏️', 'Rename');
+    const saveBtn   = catButton('cat-save', '✓', 'Save');
+    const cancelBtn = catButton('cat-cancel', '✕', 'Cancel');
+    const deleteBtn = catButton('cat-delete', '🗑', 'Delete');
+    saveBtn.hidden = cancelBtn.hidden = true;
+    actions.append(upBtn, downBtn, editBtn, saveBtn, cancelBtn, deleteBtn);
+
+    li.append(grip, dot, nameSpan, nameInput, actions);
+
+    const original = () => li.dataset.cat;
+    const endEdit = () => {
+      nameInput.value  = original();
+      nameSpan.hidden  = false;
+      nameInput.hidden = true;
+      editBtn.hidden   = false;
+      saveBtn.hidden   = true;
+      cancelBtn.hidden = true;
+    };
+
+    editBtn.addEventListener('click', () => {
+      nameSpan.hidden  = true;
+      nameInput.hidden = false;
+      editBtn.hidden   = true;
+      saveBtn.hidden   = false;
+      cancelBtn.hidden = false;
+      nameInput.focus();
+      nameInput.select();
+    });
+    cancelBtn.addEventListener('click', endEdit);
+    nameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); endEdit(); }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const newName = nameInput.value.trim();
+      if (!newName || newName === original()) { endEdit(); return; }
+      saveBtn.disabled = true;
+      const res = await fetch(`/api/categories/${encodeURIComponent(original())}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_name: newName }),
+      });
+      saveBtn.disabled = false;
+      if (!res.ok) { alertDialog({ message: 'A category with that name already exists.' }); return; }
+      const from = original();
+      li.dataset.cat = newName;
+      nameSpan.textContent = newName;
+      dot.style.background = hashColor(newName);
+      endEdit();
+      catsNote('✓ Renamed');
+      await renderNavTree();
+      announceCategories({ renamed: { from, to: newName } });
+    });
+
+    deleteBtn.addEventListener('click', async () => {
+      if (!await confirmDialog({
+        title: 'Delete category?',
+        message: `Delete category "${original()}"? People in this category will be moved to the first available category.`,
+        confirmLabel: 'Delete', danger: true })) return;
+      deleteBtn.disabled = true;
+      const res = await fetch(`/api/categories/${encodeURIComponent(original())}`, { method: 'DELETE' });
+      deleteBtn.disabled = false;
+      if (!res.ok) return;
+      const { fallback } = await res.json().catch(() => ({}));
+      li.remove();
+      catsNote('✓ Deleted');
+      await renderNavTree();
+      announceCategories({ deleted: original(), fallback });
+    });
+
+    // ── Reorder: arrows and drag, both ending in the same POST ─────────────
+    upBtn.addEventListener('click', () => {
+      const prev = li.previousElementSibling;
+      if (prev) { catsList.insertBefore(li, prev); saveCatOrder(); }
+    });
+    downBtn.addEventListener('click', () => {
+      const next = li.nextElementSibling;
+      if (next) { catsList.insertBefore(next, li); saveCatOrder(); }
+    });
+
+    li.addEventListener('dragstart', e => {
+      catDragRow = li;
+      li.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', name);
+    });
+    li.addEventListener('dragend', () => {
+      li.classList.remove('dragging');
+      if (catDragRow) { catDragRow = null; saveCatOrder(); }
+    });
+    li.addEventListener('dragover', e => {
+      if (!catDragRow || catDragRow === li) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Insert before or after depending on which half of the row we are over.
+      const box = li.getBoundingClientRect();
+      const after = e.clientY > box.top + box.height / 2;
+      catsList.insertBefore(catDragRow, after ? li.nextElementSibling : li);
+    });
+    li.addEventListener('drop', e => { e.preventDefault(); });
+
+    return li;
+  }
+
+  async function saveCatOrder() {
+    const order = [...catsList.querySelectorAll('.cat-row')].map(li => li.dataset.cat);
+    const res = await fetch('/api/categories/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
+    });
+    if (!res.ok) { catsNote('✗ Could not save the order'); return; }
+    catsNote('✓ Order saved');
+    await renderNavTree();
+    announceCategories({ reordered: order });
+  }
+
+  async function loadCategories() {
+    const res = await fetch('/api/categories');
+    if (!res.ok) return;
+    const cats = await res.json();
+    catsList.innerHTML = '';
+    cats.forEach(c => catsList.appendChild(buildCatRow(c)));
+  }
+  window.loadCategories = loadCategories;
+
+  newCatSave.addEventListener('click', async () => {
+    const name = newCatInput.value.trim();
+    if (!name) return;
+    newCatSave.disabled = true;
+    const res = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    newCatSave.disabled = false;
+    if (!res.ok) { alertDialog({ message: 'That category already exists.' }); return; }
+    newCatInput.value = '';
+    catsList.appendChild(buildCatRow(name));
+    catsNote('✓ Added');
+    await renderNavTree();
+    announceCategories({ added: name });
+  });
+  newCatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); newCatSave.click(); }
+  });
+
+  loadCategories();
   </script>
   {% block scripts %}{% endblock %}
 </body>

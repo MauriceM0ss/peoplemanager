@@ -24,8 +24,9 @@ def normalize_id(name: str) -> str:
 
 # ── queries ───────────────────────────────────────────────────────────────────
 def get_categories() -> list[str]:
+    """Categories in the user's manual order (Settings → Categories)."""
     conn = get_db()
-    rows = conn.execute("SELECT name FROM categories ORDER BY name").fetchall()
+    rows = conn.execute("SELECT name FROM categories ORDER BY position, name").fetchall()
     conn.close()
     return [r["name"] for r in rows]
 
@@ -75,12 +76,27 @@ _PALETTE = [
 ]
 
 
+def stable_hash(s: str) -> int:
+    """Deterministic 32-bit string hash, mirrored by hashColor() in base.html.
+
+    Python's built-in hash() is salted per process, so the same name picked a
+    different colour after every restart — and the browser could never derive
+    the matching colour when it repaints a badge without a page reload.
+    """
+    h = 0
+    for ch in s:
+        h = (31 * h + ord(ch)) & 0xFFFFFFFF
+    if h >= 0x80000000:
+        h -= 0x100000000
+    return h
+
+
 def initials_color(person_id: str) -> str:
-    return _PALETTE[hash(person_id) % len(_PALETTE)]
+    return _PALETTE[abs(stable_hash(person_id)) % len(_PALETTE)]
 
 
 def category_color(name: str) -> str:
-    return _PALETTE[hash(name) % len(_PALETTE)]
+    return _PALETTE[abs(stable_hash(name)) % len(_PALETTE)]
 
 
 def doc_icon(ext: str) -> str:

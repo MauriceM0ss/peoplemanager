@@ -1,22 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Overview{% endblock %}
 
-{% block settings_tabs %}
-<button class="settings-tab" data-tab="categories" role="tab">Categories</button>
-{% endblock %}
-
-{% block settings_panels %}
-<div class="settings-panel" data-panel="categories" hidden>
-  <div class="settings-section">
-    <h3 class="settings-section-title">🏷 Categories</h3>
-    <p class="settings-desc">Add, rename or delete the categories people are grouped under.</p>
-    <button class="btn-secondary" id="btn-cat-manage-settings">Manage categories</button>
-  </div>
-</div>
-{% endblock %}
-
 {% block content %}
-{% set cats = people|map(attribute='category')|unique|list|sort %}
+{% set used_cats = people|map(attribute='category')|unique|list %}
+{% set cats = categories|select('in', used_cats)|list + used_cats|reject('in', categories)|list %}
 <div class="toolbar">
   <input id="search" type="search" placeholder="Search by name…" autocomplete="off">
   <select id="cat-select" class="sort-select" title="Category">
@@ -34,39 +21,10 @@
   <button class="btn-primary" id="btn-add-person">＋ Person</button>
 </div>
 
-<!-- ── Categories manager modal ── -->
-<div class="modal-backdrop" id="cats-backdrop" hidden>
-  <div class="modal modal-wide" role="dialog" aria-modal="true">
-    <h2 class="modal-title">Manage categories</h2>
-    <ul class="cats-list" id="cats-list">
-      {% for cat in categories %}
-      <li class="cat-row" data-cat="{{ cat }}">
-        <span class="cat-dot" style="background:{{ cat | category_color }}"></span>
-        <span class="cat-name">{{ cat }}</span>
-        <input class="cat-name-input" type="text" value="{{ cat }}" hidden>
-        <div class="cat-actions">
-          <button class="cat-btn cat-edit"   title="Rename">✏️</button>
-          <button class="cat-btn cat-save"   title="Save" hidden>✓</button>
-          <button class="cat-btn cat-cancel" title="Cancel" hidden>✕</button>
-          <button class="cat-btn cat-delete" title="Delete">🗑</button>
-        </div>
-      </li>
-      {% endfor %}
-    </ul>
-    <div class="cats-add-row">
-      <input type="text" id="new-cat-input" placeholder="New category…" autocomplete="off">
-      <button class="btn-save" id="new-cat-save">Add</button>
-    </div>
-    <div style="text-align:right;margin-top:8px">
-      <button class="btn-cancel" id="cats-close">Close</button>
-    </div>
-  </div>
-</div>
-
-
 <div class="grid" id="grid">
   {% for p in people %}
   <a class="card" href="{{ url_for('pages.person_detail', person_id=p.id) }}"
+     data-pid="{{ p.id }}"
      data-name="{{ p.name|lower }}"
      data-cat="{{ p.category }}"
      data-meetings="{{ p.meeting_count }}"
@@ -155,101 +113,70 @@ if (savedCat !== null) catSelect.value = savedCat;
 
 sortCards(); // applies sort + filter in one pass
 
-// ── Categories manager ────────────────────────────────────────────────────────
-const catsBackdrop = document.getElementById('cats-backdrop');
+// ── Live updates ──────────────────────────────────────────────────────────────
+// Category edits and sidebar drag-and-drop happen in base.html; the grid
+// repaints itself from these events instead of waiting for a page reload.
+function catBadgeOf(card) { return card.querySelector('.badge'); }
 
-document.getElementById('cats-close').addEventListener('click', () => {
-  catsBackdrop.hidden = true;
-});
-catsBackdrop.addEventListener('click', e => {
-  if (e.target === catsBackdrop) catsBackdrop.hidden = true;
-});
-
-function wireCatRow(li) {
-  const nameSpan  = li.querySelector('.cat-name');
-  const nameInput = li.querySelector('.cat-name-input');
-  const editBtn   = li.querySelector('.cat-edit');
-  const saveBtn   = li.querySelector('.cat-save');
-  const cancelBtn = li.querySelector('.cat-cancel');
-  const deleteBtn = li.querySelector('.cat-delete');
-  const original  = () => li.dataset.cat;
-
-  editBtn.addEventListener('click', () => {
-    nameSpan.hidden  = true;
-    nameInput.hidden = false;
-    editBtn.hidden   = true;
-    saveBtn.hidden   = false;
-    cancelBtn.hidden = false;
-    nameInput.focus();
-    nameInput.select();
-  });
-
-  cancelBtn.addEventListener('click', () => {
-    nameInput.value  = original();
-    nameSpan.hidden  = false;
-    nameInput.hidden = true;
-    editBtn.hidden   = false;
-    saveBtn.hidden   = true;
-    cancelBtn.hidden = true;
-  });
-
-  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveBtn.click(); });
-
-  saveBtn.addEventListener('click', async () => {
-    const newName = nameInput.value.trim();
-    if (!newName || newName === original()) { cancelBtn.click(); return; }
-    saveBtn.disabled = true;
-    const res = await fetch(`/api/categories/${encodeURIComponent(original())}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_name: newName }),
-    });
-    if (!res.ok) { alertDialog({ message: 'A category with that name already exists.' }); saveBtn.disabled = false; return; }
-    li.dataset.cat = newName;
-    nameSpan.textContent = newName;
-    nameInput.value = newName;
-    cancelBtn.click();
-    saveBtn.disabled = false;
-    sessionStorage.setItem('reopen-cats', '1');
-    location.reload();
-  });
-
-  deleteBtn.addEventListener('click', async () => {
-    if (!await confirmDialog({ title: 'Delete category?', message: `Delete category "${original()}"? People in this category will be moved to the first available category.`, confirmLabel: 'Delete', danger: true })) return;
-    deleteBtn.disabled = true;
-    const res = await fetch(`/api/categories/${encodeURIComponent(original())}`, { method: 'DELETE' });
-    if (!res.ok) { deleteBtn.disabled = false; return; }
-    li.remove();
-    sessionStorage.setItem('reopen-cats', '1');
-    location.reload();
-  });
+function paintCard(card, category) {
+  card.dataset.cat = category;
+  const badge = catBadgeOf(card);
+  if (badge) {
+    badge.textContent = category;
+    badge.style.background = window.hashColor(category);
+  }
 }
 
-document.querySelectorAll('.cat-row').forEach(wireCatRow);
+async function rebuildCatFilter() {
+  let order = [];
+  try {
+    const r = await fetch('/api/categories');
+    if (r.ok) order = await r.json();
+  } catch (e) { /* keep whatever order we can derive below */ }
 
-const newCatInput = document.getElementById('new-cat-input');
-document.getElementById('new-cat-save').addEventListener('click', async () => {
-  const name = newCatInput.value.trim();
-  if (!name) return;
-  const res = await fetch('/api/categories', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) { alertDialog({ message: 'That category already exists.' }); return; }
-  newCatInput.value = '';
-  sessionStorage.setItem('reopen-cats', '1');
-  location.reload();
-});
-newCatInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('new-cat-save').click();
-});
+  const counts = new Map();
+  cards.forEach(c => counts.set(c.dataset.cat, (counts.get(c.dataset.cat) || 0) + 1));
+  // Known categories first, in the user's order; then anything left over.
+  const names = order.filter(n => counts.has(n))
+    .concat([...counts.keys()].filter(n => !order.includes(n)));
 
-// Re-open categories modal after a reload triggered by a category add/delete
-if (sessionStorage.getItem('reopen-cats')) {
-  sessionStorage.removeItem('reopen-cats');
-  catsBackdrop.hidden = false;
+  const previous = catSelect.value;
+  catSelect.innerHTML = '';
+  const all = document.createElement('option');
+  all.value = '';
+  all.textContent = `Everyone (${cards.length})`;
+  catSelect.appendChild(all);
+  for (const name of names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = `${name} (${counts.get(name)})`;
+    catSelect.appendChild(opt);
+  }
+  // Keep the active filter if it still exists, otherwise fall back to Everyone.
+  catSelect.value = names.includes(previous) ? previous : '';
+  if (catSelect.value !== previous) localStorage.setItem('robsidian-cat', catSelect.value);
+  update();
 }
+
+document.addEventListener('person-category-changed', async e => {
+  const { personId, category } = e.detail;
+  const card = cards.find(c => c.dataset.pid === personId);
+  if (card) paintCard(card, category);
+  await rebuildCatFilter();
+});
+
+document.addEventListener('categories-changed', async e => {
+  const d = e.detail || {};
+  if (d.renamed) {
+    cards.filter(c => c.dataset.cat === d.renamed.from)
+         .forEach(c => paintCard(c, d.renamed.to));
+  }
+  if (d.deleted && d.fallback) {
+    cards.filter(c => c.dataset.cat === d.deleted)
+         .forEach(c => paintCard(c, d.fallback));
+  }
+  await rebuildCatFilter();
+});
 
 </script>
 {% endblock %}

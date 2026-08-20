@@ -148,7 +148,7 @@ If PIN protection is enabled the file is encrypted with SQLCipher (AES-256) and 
 | `person_overrides` | Edits to name, category, key details, and profile |
 | `persons` | All people added through the web interface |
 | `hidden_persons` | People removed via "Remove person" (hidden, not fully erased) |
-| `categories` | All categories (seeded with 4 defaults on first run) |
+| `categories` | All categories (seeded with 4 defaults on first run), plus their manual sort order |
 | `tasks` | Per-person task list items |
 
 ### Finding the database file on disk
@@ -213,7 +213,7 @@ sqlite3 /path/to/people.db "DELETE FROM hidden_persons WHERE person_id = 'jane_d
 
 - **Card grid** showing all your people
 - **Search** — filters by name in real time
-- **Category dropdown** — filter the grid to a single category; defaults to "Everyone"; preference is remembered in browser storage
+- **Category dropdown** — filter the grid to a single category; listed in the order set in ⚙ Settings → Categories; defaults to "Everyone"; preference is remembered in browser storage
 - **Sort dropdown** — four options, preference remembered in browser storage:
   - Name A → Z *(default)*
   - Name Z → A
@@ -222,13 +222,22 @@ sqlite3 /path/to/people.db "DELETE FROM hidden_persons WHERE person_id = 'jane_d
 - **+ Person** — add a new person (opens a modal asking for name and category)
 - **⚙ (top-right)** — opens the settings panel (see below)
 
+### Navigation sidebar
+
+Present on every page (☰ collapses it on desktop, opens it as a drawer on mobile).
+
+- People are grouped under their category, in the order set in ⚙ Settings → Categories
+- **Drag a person onto another category** to move them there. The person's own page, the overview
+  card and the category filter all update straight away — no page reload
+- Expand a person to jump to their Tasks / Notes / Documents
+
 ### PIN protection
 
 On first visit the app shows a setup page to create a PIN (4–10 characters). Once set:
 
 - The database is encrypted with **AES-256 (SQLCipher)** using a key derived from your PIN — the `.db` file on disk is unreadable without it
 - A **🔒 lock button** appears in the top-right header to lock the app immediately
-- The app **auto-locks** after a configurable period of inactivity (5 / 15 / 30 / 60 minutes); default is 15 minutes
+- The app **auto-locks** after a configurable period of inactivity (5 / 15 / 30 / 60 minutes, or **Never** to disable it); default is 15 minutes
 - The timeout and a PIN-change form are both in the ⚙ settings panel
 
 #### Forgotten PIN
@@ -254,16 +263,23 @@ Accessible from the cog icon in the top-right corner on every page.
 
 #### Security (only shown when PIN is enabled)
 
-- **Auto-lock after** — change the inactivity timeout (5 / 15 / 30 / 60 minutes)
+- **Auto-lock after** — change the inactivity timeout (5 / 15 / 30 / 60 minutes), or pick **Never** to switch auto-lock off entirely. With Never the session ends only via the 🔒 lock button or a server restart.
 - **Change PIN** — enter your current PIN, then choose a new one; the database is transparently re-encrypted with the new key
 
 #### Category management
 
+Available from every page, including while a person is open.
+
 - **Add** a new category by typing a name and clicking Add or pressing Enter
 - **Rename** by clicking ✏️ on a row, editing inline, then pressing Enter or ✓
-- **Delete** by clicking 🗑 — people in that category are reassigned to the first remaining category
+- **Delete** by clicking 🗑 — people in that category are reassigned to the first category in the list
+- **Reorder** by dragging a row's ⠿ handle, or with the ▲ / ▼ buttons. This is the only place the
+  order can be changed, and it drives the order of the sidebar, the overview's category filter,
+  and the fallback used when a category is deleted.
 - Default categories on first run: `Friends`, `Family`, `Work`, `Other`
 - Each category gets a consistent colour derived from its name
+
+Every change lands in the sidebar and the open page immediately — no page reload needed.
 
 #### Export / Import
 

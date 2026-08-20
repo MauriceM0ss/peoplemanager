@@ -106,3 +106,31 @@ def test_reset_wipes_config_and_db(auth_client, appmod):
     assert r.status_code == 302
     assert not appmod._PIN_CONFIG.exists()
     assert not appmod.DB_PATH.exists()
+
+
+def test_timeout_never(auth_client, appmod):
+    """0 minutes = auto-lock disabled; the session must not expire on idle."""
+    from peoplecrm import security
+
+    assert auth_client.post("/api/settings/timeout", json={"minutes": 0}).status_code == 200
+    assert appmod._load_pin_config()["timeout_minutes"] == 0
+
+    # Backdate the unlock session well past every finite timeout.
+    for sess in security._sessions.values():
+        sess["last_activity"] = 0.0
+    assert auth_client.get("/api/tree").status_code == 200
+
+
+def test_timeout_zero_still_expires_when_a_finite_timeout_is_set(auth_client, appmod):
+    from peoplecrm import security
+
+    assert auth_client.post("/api/settings/timeout", json={"minutes": 5}).status_code == 200
+    for sess in security._sessions.values():
+        sess["last_activity"] = 0.0
+    assert auth_client.get("/api/tree").status_code == 403
+
+
+def test_setup_accepts_never(client, appmod):
+    r = client.post("/setup", data={"pin": "1234", "confirm": "1234", "timeout": "0"})
+    assert r.status_code == 302
+    assert appmod._load_pin_config()["timeout_minutes"] == 0

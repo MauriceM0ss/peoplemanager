@@ -51,7 +51,9 @@ def _get_session() -> dict | None:
     sess = _sessions[sid]
     cfg  = _load_pin_config()
     timeout = (cfg or {}).get("timeout_minutes", 15) * 60
-    if time.time() - sess["last_activity"] > timeout:
+    # timeout_minutes == 0 means auto-lock is disabled; the session only ends
+    # via the Lock button, /api/lock, or a server restart.
+    if timeout > 0 and time.time() - sess["last_activity"] > timeout:
         _sessions.pop(sid, None)
         flask_session.clear()
         return None

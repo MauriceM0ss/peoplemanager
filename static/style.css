@@ -543,6 +543,26 @@ select { cursor: pointer; padding-right: 30px;
 .cats-add-row { display: flex; gap: 8px; margin-top: 10px; }
 .cats-add-row input { flex: 1; }
 
+/* Reordering (Settings → Categories only). The grip is the visual affordance;
+   the whole row is draggable so a mis-grab still works. */
+.cat-grip {
+  flex-shrink: 0; cursor: grab; color: var(--muted); font-size: 1rem;
+  line-height: 1; padding: 0 2px; user-select: none;
+}
+.cat-grip:hover { color: var(--text); }
+.cat-grip:active { cursor: grabbing; }
+.cat-row { cursor: default; }
+.cat-row.dragging { opacity: .45; }
+.cat-btn.cat-up, .cat-btn.cat-down { font-size: .6rem; }
+
+/* Dropping a person onto a category in the sidebar. */
+.tree-person-item.dragging .tree-person-link { opacity: .45; }
+.tree-cat-row.drag-over {
+  background: var(--accent-glow);
+  outline: 2px dashed var(--accent); outline-offset: -2px;
+}
+.tree-cat-row.drag-over .tree-cat-label { color: var(--accent); }
+
 /* ── Person detail layout ─────────────────────────────────────────────────── */
 .person-layout {
   max-width: 1200px; margin: 0 auto; padding: 28px 28px 60px;

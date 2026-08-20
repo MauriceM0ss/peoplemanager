@@ -111,3 +111,76 @@ def test_delete_category_reassigns_people(auth_client):
     assert found  # still present
     fb_cat = next(c for c in tree if c["category"] == fallback)
     assert any(p["id"] == pid for p in fb_cat["people"])
+
+
+# ── category order ─────────────────────────────────────────────────────────
+def test_categories_have_a_manual_order(auth_client):
+    """Seeded order is the insertion order, not the alphabet."""
+    assert auth_client.get("/api/categories").get_json() == \
+        ["Friends", "Family", "Work", "Other"]
+
+
+def test_new_category_lands_last(auth_client):
+    auth_client.post("/api/categories", json={"name": "Aaa Gym"})
+    assert auth_client.get("/api/categories").get_json()[-1] == "Aaa Gym"
+
+
+def test_reorder_categories(auth_client):
+    r = auth_client.post("/api/categories/reorder",
+                         json={"order": ["Work", "Other", "Friends", "Family"]})
+    assert r.status_code == 200
+    assert auth_client.get("/api/categories").get_json() == \
+        ["Work", "Other", "Friends", "Family"]
+
+
+def test_reorder_drives_the_tree_order(auth_client):
+    auth_client.post("/api/categories/reorder", json={"order": ["Work", "Family"]})
+    tree = [c["category"] for c in auth_client.get("/api/tree").get_json()]
+    assert tree[:2] == ["Work", "Family"]
+
+
+def test_reorder_ignores_unknown_names_and_keeps_the_rest(auth_client):
+    r = auth_client.post("/api/categories/reorder",
+                         json={"order": ["Work", "Nonexistent", "Work"]})
+    assert r.status_code == 200
+    cats = auth_client.get("/api/categories").get_json()
+    assert cats[0] == "Work"
+    assert sorted(cats) == sorted(["Friends", "Family", "Work", "Other"])
+
+
+def test_reorder_rejects_a_bad_payload(auth_client):
+    assert auth_client.post("/api/categories/reorder", json={"order": "Work"}).status_code == 400
+    assert auth_client.post("/api/categories/reorder", json={"order": [1, 2]}).status_code == 400
+
+
+def test_delete_category_falls_back_to_the_first_in_order(auth_client):
+    auth_client.post("/api/categories/reorder",
+                     json={"order": ["Work", "Friends", "Family", "Other"]})
+    auth_client.post("/api/categories", json={"name": "Temp"})
+    make_person(auth_client, "Eve", "Temp")
+    assert auth_client.delete("/api/categories/Temp").get_json()["fallback"] == "Work"
+
+
+def test_position_backfilled_for_a_pre_existing_database(appmod):
+    """Upgrading a DB written before `position` existed must not shuffle names.
+
+    Those databases ordered categories alphabetically, so that becomes the
+    starting manual order rather than the arbitrary insertion order.
+    """
+    import sqlite3
+
+    from peoplecrm.config import DB_PATH
+
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.execute("CREATE TABLE categories ("
+                 "id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)")
+    for cat in ("Work", "Family", "Friends", "Other"):
+        conn.execute("INSERT INTO categories (name) VALUES (?)", (cat,))
+    conn.commit()
+    conn.close()
+
+    c = appmod.app.test_client()
+    assert c.post("/setup", data={"pin": "1234", "confirm": "1234",
+                                  "timeout": "15"}).status_code == 302
+    assert c.get("/api/categories").get_json() == ["Family", "Friends", "Other", "Work"]

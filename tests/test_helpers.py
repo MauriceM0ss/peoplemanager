@@ -46,3 +46,28 @@ def test_doc_icon(appmod):
     assert appmod.doc_icon("docx") == "📝"
     assert appmod.doc_icon("pdf") == "📋"
     assert appmod.doc_icon("unknown") == "📄"
+
+
+# ── colours ────────────────────────────────────────────────────────────────
+def test_stable_hash_is_process_independent(appmod):
+    """Must not use Python's salted hash(): the browser mirrors this in JS.
+
+    The expected values are what
+    ``[...s].reduce((h,c) => (Math.imul(31,h)+c.charCodeAt(0))|0, 0)``
+    produces for the same input, so a badge repainted client-side matches the
+    colour the server would have rendered.
+    """
+    from peoplecrm.helpers import stable_hash
+
+    assert stable_hash("") == 0
+    assert stable_hash("Work") == 2702129
+    assert stable_hash("Friends") == 1064558965
+    # 32-bit signed wrap-around
+    assert stable_hash("a long category name that overflows") == -904489808
+
+
+def test_category_color_is_stable(appmod):
+    from peoplecrm.helpers import category_color
+
+    assert category_color("Work") == category_color("Work")
+    assert category_color("Work").startswith("#")
