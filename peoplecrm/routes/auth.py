@@ -41,6 +41,11 @@ def _reset_unlock_throttle() -> None:
     _unlock_state["locked_until"] = 0.0
 
 
+# Auto-lock choices, in minutes. 0 means "Never" — the unlock session then has
+# no idle expiry and the browser never navigates to /lock on its own.
+TIMEOUT_CHOICES = (0, 5, 15, 30, 60)
+
+
 @bp.route("/setup", methods=["GET", "POST"])
 def setup():
     if _load_pin_config():
@@ -55,7 +60,7 @@ def setup():
         return render_template("setup.html", error="PINs do not match.")
     try:
         timeout = int(request.form.get("timeout", 15))
-        if timeout not in (5, 15, 30, 60):
+        if timeout not in TIMEOUT_CHOICES:
             timeout = 15
     except ValueError:
         timeout = 15
@@ -185,7 +190,7 @@ def update_timeout():
         minutes = int(data.get("minutes", 15))
     except (ValueError, TypeError):
         return jsonify({"error": "invalid"}), 400
-    if minutes not in (5, 15, 30, 60):
+    if minutes not in TIMEOUT_CHOICES:
         return jsonify({"error": "invalid"}), 400
     cfg = _load_pin_config()
     cfg["timeout_minutes"] = minutes

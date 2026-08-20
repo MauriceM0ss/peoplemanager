@@ -91,9 +91,14 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS categories (
-        id   INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        name     TEXT UNIQUE NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0
     )""")
+    try:
+        conn.execute("ALTER TABLE categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+    except Exception:
+        pass
     conn.execute("""CREATE TABLE IF NOT EXISTS documents (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         person_id   TEXT NOT NULL,
@@ -113,8 +118,15 @@ def init_db():
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     if not conn.execute("SELECT 1 FROM categories").fetchone():
-        for cat in ("Friends", "Family", "Work", "Other"):
-            conn.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (cat,))
+        for pos, cat in enumerate(("Friends", "Family", "Work", "Other")):
+            conn.execute("INSERT OR IGNORE INTO categories (name, position) VALUES (?,?)",
+                         (cat, pos))
+    # Databases created before the column existed have every position at 0;
+    # seed the manual order from the old alphabetical one so nothing jumps.
+    elif not conn.execute("SELECT 1 FROM categories WHERE position != 0").fetchone():
+        rows = conn.execute("SELECT id FROM categories ORDER BY name").fetchall()
+        for pos, row in enumerate(rows):
+            conn.execute("UPDATE categories SET position=? WHERE id=?", (pos, row["id"]))
     conn.commit()
     conn.close()
 

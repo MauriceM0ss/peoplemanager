@@ -22,17 +22,21 @@ def tree_data():
     doc_counts = {r["person_id"]: r["cnt"] for r in conn.execute(
         "SELECT person_id, COUNT(*) AS cnt FROM documents GROUP BY person_id").fetchall()}
     conn.close()
-    cats: dict[str, list] = {cat: [] for cat in get_categories()}
+    ordered = get_categories()
+    cats: dict[str, list] = {cat: [] for cat in ordered}
     for p in people:
-        cats.setdefault(p["category"], []).append({
-            "id": p["id"], "name": p["name"],
+        if p["category"] not in cats:
+            cats[p["category"]] = []      # orphan category: shown after the known ones
+            ordered.append(p["category"])
+        cats[p["category"]].append({
+            "id": p["id"], "name": p["name"], "category": p["category"],
             "tasks":     open_tasks.get(p["id"], 0),
             "notes":     note_counts.get(p["id"], 0),
             "documents": doc_counts.get(p["id"], 0),
         })
     result = [
         {"category": cat, "people": sorted(cats[cat], key=lambda x: x["name"].lower())}
-        for cat in sorted(cats)
+        for cat in ordered
     ]
     return jsonify(result)
 

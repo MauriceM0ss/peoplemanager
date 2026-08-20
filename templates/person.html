@@ -326,10 +326,53 @@ const profileView  = document.getElementById('profile-view');
 detailsView.innerHTML = marked.parse(detailsView.dataset.raw || '');
 profileView.innerHTML = marked.parse(profileView.dataset.raw || '');
 
-document.getElementById('btn-edit-person').addEventListener('click', () => {
+// Repopulate from the server, preserving the current selection: categories can
+// be added, renamed or reordered from Settings while this page stays open.
+async function refreshCategorySelect(selected) {
+  const want = selected || editCat.value || displayBadge.textContent.trim();
+  let cats;
+  try {
+    const r = await fetch('/api/categories');
+    if (!r.ok) return;
+    cats = await r.json();
+  } catch (e) { return; }
+  if (!cats.includes(want)) cats = cats.concat(want);
+  editCat.innerHTML = '';
+  for (const c of cats) {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    editCat.appendChild(opt);
+  }
+  editCat.value = want;
+}
+
+document.getElementById('btn-edit-person').addEventListener('click', async () => {
   editBackdrop.hidden = false;
   editName.focus();
   editName.select();
+  await refreshCategorySelect();
+});
+
+// ── Live updates from base.html ─────────────────────────────────────────────
+function paintCategory(category) {
+  displayBadge.textContent = category;
+  displayBadge.style.background = window.hashColor(category);
+  refreshCategorySelect(category);
+}
+
+// Dragging this person onto another category in the sidebar.
+document.addEventListener('person-category-changed', e => {
+  if (e.detail.personId === {{ person.id | tojson }}) paintCategory(e.detail.category);
+});
+
+// A category was added, renamed, deleted or reordered in Settings.
+document.addEventListener('categories-changed', async e => {
+  const d = e.detail || {};
+  const current = displayBadge.textContent.trim();
+  if (d.renamed && d.renamed.from === current)      paintCategory(d.renamed.to);
+  else if (d.deleted === current && d.fallback)     paintCategory(d.fallback);
+  else                                              await refreshCategorySelect(current);
 });
 
 function closeEditModal() {
@@ -379,15 +422,15 @@ editSave.addEventListener('click', async () => {
     return;
   }
 
-  // Update sidebar display — colour palette must match Python's _PALETTE
-  const palette = ["#4f46e5","#7c3aed","#db2777","#dc2626","#d97706","#059669",
-                   "#0284c7","#0891b2","#7c2d12","#166534","#1e3a5f","#4a044e"];
-  const hashColor = s => palette[Math.abs([...s].reduce((h,c) => Math.imul(31,h)+c.charCodeAt(0)|0, 0)) % palette.length];
-
+  // Update sidebar display (window.hashColor mirrors Python's palette).
   displayName.textContent = newName;
   displayBadge.textContent = newCat;
-  displayBadge.style.background = hashColor(newCat);
+  displayBadge.style.background = window.hashColor(newCat);
   document.title = newName + ' · People Manager';
+
+  // Re-render the navigation tree so the new name/category show up at once,
+  // instead of only after the next page load.
+  if (window.refreshNavTree) window.refreshNavTree();
 
   detailsView.dataset.raw = newDetails;
   detailsView.innerHTML = marked.parse(newDetails);

@@ -112,13 +112,38 @@ def add_category():
         return jsonify({"error": "name required"}), 400
     conn = get_db()
     try:
-        conn.execute("INSERT INTO categories (name) VALUES (?)", (name,))
+        nxt = conn.execute("SELECT COALESCE(MAX(position), -1) + 1 AS n FROM categories").fetchone()["n"]
+        conn.execute("INSERT INTO categories (name, position) VALUES (?,?)", (name, nxt))
         conn.commit()
     except Exception:
         conn.close()
         return jsonify({"error": "already exists"}), 409
     conn.close()
     return jsonify({"ok": True})
+
+
+@bp.route("/api/categories/reorder", methods=["POST"])
+@require_unlock
+def reorder_categories():
+    """Persist the manual category order set in Settings -> Categories."""
+    data  = request.get_json() or {}
+    order = data.get("order")
+    if not isinstance(order, list) or not all(isinstance(n, str) for n in order):
+        return jsonify({"error": "order must be a list of category names"}), 400
+    conn     = get_db()
+    known    = {r["name"] for r in conn.execute("SELECT name FROM categories").fetchall()}
+    seen     = []
+    for name in order:
+        if name in known and name not in seen:
+            seen.append(name)
+    # Anything the client did not mention keeps its relative place at the end.
+    rest = [r["name"] for r in conn.execute(
+        "SELECT name FROM categories ORDER BY position, name").fetchall() if r["name"] not in seen]
+    for pos, name in enumerate(seen + rest):
+        conn.execute("UPDATE categories SET position=? WHERE name=?", (pos, name))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "order": seen + rest})
 
 
 @bp.route("/api/categories/<path:name>", methods=["PUT"])
@@ -146,7 +171,7 @@ def rename_category(name):
 def delete_category(name):
     conn = get_db()
     cats = [r["name"] for r in conn.execute(
-        "SELECT name FROM categories WHERE name != ? ORDER BY name", (name,)).fetchall()]
+        "SELECT name FROM categories WHERE name != ? ORDER BY position, name", (name,)).fetchall()]
     fallback = cats[0] if cats else "Other"
     conn.execute("UPDATE persons          SET category=? WHERE category=?", (fallback, name))
     conn.execute("UPDATE person_overrides SET category=? WHERE category=?", (fallback, name))
