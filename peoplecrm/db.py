@@ -59,9 +59,14 @@ def init_db():
         profile    TEXT,
         name       TEXT,
         category   TEXT,
+        start_date TEXT,
+        birth_date TEXT,
+        role       TEXT,
+        grade      TEXT,
+        status     TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
-    for col in ("name", "category"):
+    for col in ("name", "category") + config.PROFILE_FIELD_NAMES:
         try:
             conn.execute(f"ALTER TABLE person_overrides ADD COLUMN {col} TEXT")
         except Exception:

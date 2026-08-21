@@ -591,6 +591,29 @@ select { cursor: pointer; padding-right: 30px;
 .sidebar-section { width: 100%; border-top: 1px solid var(--pane-rule); padding-top: 12px; margin-top: 4px; }
 .sidebar-section h3 { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 8px; }
 
+/* Structured profile fields, above the free-text Profile overview notes.
+   Two columns so the labels line up; they stack once the sidebar is narrow. */
+.profile-fields { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin-bottom: 10px; }
+.profile-field { display: contents; }
+.profile-key { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+.profile-value { font-size: .82rem; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.profile-value.is-empty { color: var(--muted); opacity: .6; }
+/* Status reads as a state, so give it a chip like the category badge. */
+.profile-field[data-field="status"] .profile-value.is-set {
+  display: inline-block; justify-self: start;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 999px;
+  padding: 1px 9px; font-size: .74rem; font-weight: 600;
+}
+@media (max-width: 760px) {
+  .profile-fields { grid-template-columns: 1fr; gap: 2px; }
+  .profile-key { margin-top: 6px; }
+}
+
+/* Profile inputs in the edit dialog: two per row, Role spanning both. */
+.edit-profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.edit-profile-grid .edit-profile-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) { .edit-profile-grid { grid-template-columns: 1fr; } }
+
 .danger-zone { width: 100%; border-top: 1px solid var(--pane-rule); padding-top: 12px; margin-top: 4px; }
 .btn-delete-person {
   width: 100%; cursor: pointer; padding: 8px 12px; background: none;
