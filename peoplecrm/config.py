@@ -11,6 +11,23 @@ STATIC_DIR    = ROOT_DIR / "static"
 DB_PATH     = Path(os.environ.get("DB_PATH",    "/data/people.db"))
 _PIN_CONFIG = Path(os.environ.get("PIN_CONFIG", "/data/pin.json"))
 
+# ── Structured profile fields ────────────────────────────────────────────────
+# Shown under "Profile overview" on a person page, alongside the free-text
+# markdown notes. Stored as columns on person_overrides; "" means "not set".
+GRADES   = ("Grade A", "Grade B", "Grade C", "Grade D")
+STATUSES = ("Customer Deployed", "On the Bench", "Internally Deployed")
+
+# field -> label, in the order they are displayed and edited.
+PROFILE_FIELDS = (
+    ("start_date", "Start date"),
+    ("birth_date", "Birth date"),
+    ("role",       "Role"),
+    ("grade",      "Grade"),
+    ("status",     "Status"),
+)
+PROFILE_FIELD_NAMES = tuple(f for f, _ in PROFILE_FIELDS)
+PROFILE_DATE_FIELDS = ("start_date", "birth_date")
+
 ALLOWED_DOC_EXTS = {
     '.txt', '.md', '.log', '.csv', '.rtf', '.json', '.xml', '.yaml', '.yml',
     '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',

@@ -8,7 +8,7 @@ from peoplecrm import create_app
 from peoplecrm.config import DB_PATH, _PIN_CONFIG  # noqa: F401  (re-exported)
 from peoplecrm.db import init_db  # noqa: F401  (re-exported)
 from peoplecrm.helpers import (  # noqa: F401  (re-exported)
-    doc_icon, human_size, normalize_id,
+    doc_icon, human_size, normalize_id, pretty_date, stable_hash,
 )
 from peoplecrm.security import (  # noqa: F401  (re-exported)
     _derive_key, _load_pin_config,

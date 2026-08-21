@@ -71,3 +71,10 @@ def test_category_color_is_stable(appmod):
 
     assert category_color("Work") == category_color("Work")
     assert category_color("Work").startswith("#")
+
+
+def test_pretty_date(appmod):
+    assert appmod.pretty_date("2024-03-12") == "12 Mar 2024"
+    assert appmod.pretty_date("") == ""
+    assert appmod.pretty_date("not a date") == ""
+    assert appmod.pretty_date(None) == ""

@@ -29,6 +29,16 @@
 
     <section class="sidebar-section">
       <h3>Profile overview</h3>
+      <dl class="profile-fields">
+        {% for field, label in profile_fields %}
+        {% set raw = person[field] %}
+        {% set shown = raw | pretty_date if field in ('start_date', 'birth_date') else raw %}
+        <div class="profile-field" data-field="{{ field }}">
+          <dt class="profile-key">{{ label }}</dt>
+          <dd class="profile-value {{ 'is-set' if shown else 'is-empty' }}" id="pf-{{ field }}">{{ shown or '—' }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
       <div class="md-content" id="profile-view" data-raw="{{ person.profile | e }}"></div>
     </section>
 
@@ -61,6 +71,33 @@
           {% endfor %}
         </select>
       </label>
+      <div class="edit-profile-grid">
+        <label class="modal-label">Start date
+          <input type="date" id="pf-input-start_date" value="{{ person.start_date }}">
+        </label>
+        <label class="modal-label">Birth date
+          <input type="date" id="pf-input-birth_date" value="{{ person.birth_date }}">
+        </label>
+        <label class="modal-label edit-profile-wide">Role
+          <input type="text" id="pf-input-role" value="{{ person.role }}" placeholder="E.g. Security Analyst">
+        </label>
+        <label class="modal-label">Grade
+          <select id="pf-input-grade">
+            <option value="">— Not set —</option>
+            {% for g in grades %}
+            <option value="{{ g }}" {% if person.grade == g %}selected{% endif %}>{{ g }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="modal-label">Status
+          <select id="pf-input-status">
+            <option value="">— Not set —</option>
+            {% for st in statuses %}
+            <option value="{{ st }}" {% if person.status == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
       <label class="modal-label">Key details <span class="modal-label-hint">(markdown)</span>
         <textarea class="modal-textarea" id="edit-details">{{ person.details }}</textarea>
       </label>
@@ -384,40 +421,57 @@ editCancel.addEventListener('click', closeEditModal);
 editBackdrop.addEventListener('click', e => { if (e.target === editBackdrop) closeEditModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEditModal(); });
 
+// ── Structured profile fields ────────────────────────────────────────────────
+const PROFILE_FIELDS = {{ profile_fields | map(attribute=0) | list | tojson }};
+const PROFILE_DATE_FIELDS = ['start_date', 'birth_date'];
+const profileInputs = Object.fromEntries(
+  PROFILE_FIELDS.map(f => [f, document.getElementById('pf-input-' + f)]));
+
+// Mirrors helpers.pretty_date so a value repaints exactly as the server renders it.
+function prettyDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function paintProfileFields(values) {
+  for (const field of PROFILE_FIELDS) {
+    const cell = document.getElementById('pf-' + field);
+    if (!cell) continue;
+    const raw   = values[field] || '';
+    const shown = PROFILE_DATE_FIELDS.includes(field) ? prettyDate(raw) : raw;
+    cell.textContent = shown || '—';
+    cell.classList.toggle('is-set', !!shown);
+    cell.classList.toggle('is-empty', !shown);
+  }
+}
+
 editSave.addEventListener('click', async () => {
   const newName    = editName.value.trim();
   const newCat     = editCat.value;
   const newDetails = editDetails.value;
   const newProfile = editProfile.value;
   if (!newName) { editStatus.textContent = 'Name cannot be empty.'; return; }
+
+  const fields = { name: newName, category: newCat,
+                   details: newDetails, profile: newProfile };
+  for (const field of PROFILE_FIELDS) fields[field] = profileInputs[field].value.trim();
+
   editSave.disabled = true;
   editStatus.textContent = 'Saving…';
 
-  const results = await Promise.all([
-    fetch('/api/person/{{ person.id }}', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ field: 'name', content: newName }),
-    }),
-    fetch('/api/person/{{ person.id }}', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ field: 'category', content: newCat }),
-    }),
-    fetch('/api/person/{{ person.id }}', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ field: 'details', content: newDetails }),
-    }),
-    fetch('/api/person/{{ person.id }}', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ field: 'profile', content: newProfile }),
-    }),
-  ]);
+  // One batched request: the server writes all nine fields in a single
+  // transaction, so a half-applied save is not possible.
+  const res = await fetch('/api/person/{{ person.id }}', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
 
-  if (results.some(r => !r.ok)) {
-    editStatus.textContent = '✗ Error saving';
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    editStatus.textContent = '✗ ' + (data.error || 'Error saving');
     editSave.disabled = false;
     return;
   }
@@ -432,6 +486,7 @@ editSave.addEventListener('click', async () => {
   // instead of only after the next page load.
   if (window.refreshNavTree) window.refreshNavTree();
 
+  paintProfileFields(fields);
   detailsView.dataset.raw = newDetails;
   detailsView.innerHTML = marked.parse(newDetails);
   profileView.dataset.raw = newProfile;

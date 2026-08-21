@@ -184,3 +184,72 @@ def test_position_backfilled_for_a_pre_existing_database(appmod):
     assert c.post("/setup", data={"pin": "1234", "confirm": "1234",
                                   "timeout": "15"}).status_code == 302
     assert c.get("/api/categories").get_json() == ["Family", "Friends", "Other", "Work"]
+
+
+# ── structured profile fields ──────────────────────────────────────────────
+def _profile_html(auth_client, pid):
+    return auth_client.get(f"/person/{pid}").get_data(as_text=True)
+
+
+def test_profile_fields_round_trip(auth_client):
+    pid = make_person(auth_client)
+    fields = {"start_date": "2024-03-12", "birth_date": "1990-07-04",
+              "role": "Threat Hunter", "grade": "Grade B",
+              "status": "Customer Deployed"}
+    assert auth_client.put(f"/api/person/{pid}", json={"fields": fields}).status_code == 200
+    html = _profile_html(auth_client, pid)
+    assert "12 Mar 2024" in html          # dates are rendered, not raw ISO
+    assert "04 Jul 1990" in html
+    assert "Threat Hunter" in html
+    assert 'value="Grade B" selected' in html
+    assert 'value="Customer Deployed" selected' in html
+
+
+def test_profile_fields_accept_single_field_form(auth_client):
+    pid = make_person(auth_client)
+    assert auth_client.put(f"/api/person/{pid}",
+                           json={"field": "role", "content": "Consultant"}).status_code == 200
+    assert "Consultant" in _profile_html(auth_client, pid)
+
+
+def test_profile_fields_can_be_cleared(auth_client):
+    pid = make_person(auth_client)
+    auth_client.put(f"/api/person/{pid}", json={"fields": {"role": "Consultant",
+                                                           "grade": "Grade A"}})
+    r = auth_client.put(f"/api/person/{pid}", json={"fields": {"role": "", "grade": ""}})
+    assert r.status_code == 200
+    html = _profile_html(auth_client, pid)
+    assert "Consultant" not in html
+    # Both cleared fields fall back to the em-dash placeholder.
+    assert html.count('class="profile-value is-empty"') == 5
+    assert "selected" not in html.split('id="pf-input-grade"')[1].split("</select>")[0]
+
+
+def test_profile_field_validation(auth_client):
+    pid = make_person(auth_client)
+    bad = [{"start_date": "12-03-2024"}, {"birth_date": "not a date"},
+           {"grade": "Grade Z"}, {"status": "On Holiday"}]
+    for fields in bad:
+        r = auth_client.put(f"/api/person/{pid}", json={"fields": fields})
+        assert r.status_code == 400, fields
+        assert "error" in r.get_json()
+    # nothing was written
+    html = _profile_html(auth_client, pid)
+    assert "Grade Z" not in html and "On Holiday" not in html
+
+
+def test_update_person_rejects_unknown_field(auth_client):
+    pid = make_person(auth_client)
+    assert auth_client.put(f"/api/person/{pid}",
+                           json={"fields": {"salary": "100"}}).status_code == 400
+    assert auth_client.put(f"/api/person/{pid}", json={}).status_code == 400
+    assert auth_client.put(f"/api/person/{pid}", json={"fields": {}}).status_code == 400
+
+
+def test_batched_update_is_all_or_nothing(auth_client):
+    pid = make_person(auth_client)
+    r = auth_client.put(f"/api/person/{pid}",
+                        json={"fields": {"role": "Threat Hunter", "grade": "Grade Q"}})
+    assert r.status_code == 400
+    # The valid half of the rejected batch must not have landed either.
+    assert "Threat Hunter" not in _profile_html(auth_client, pid)

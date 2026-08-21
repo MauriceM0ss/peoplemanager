@@ -99,6 +99,16 @@ def category_color(name: str) -> str:
     return _PALETTE[abs(stable_hash(name)) % len(_PALETTE)]
 
 
+def pretty_date(iso: str) -> str:
+    """'2024-03-12' -> '12 Mar 2024'. Blank or unparseable input yields ''."""
+    if not iso:
+        return ""
+    try:
+        return date.fromisoformat(iso).strftime("%d %b %Y")
+    except (ValueError, TypeError):
+        return ""
+
+
 def doc_icon(ext: str) -> str:
     if ext in {'xls', 'xlsx', 'ods', 'csv'}:   return '📊'
     if ext in {'doc', 'docx', 'odt', 'rtf'}:   return '📝'
@@ -111,3 +121,4 @@ def register_filters(app):
     app.template_filter("initials_color")(initials_color)
     app.template_filter("category_color")(category_color)
     app.template_filter("doc_icon")(doc_icon)
+    app.template_filter("pretty_date")(pretty_date)

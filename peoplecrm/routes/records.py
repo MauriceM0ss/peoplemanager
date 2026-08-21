@@ -1,6 +1,9 @@
 """CRUD for persons, meetings, tasks, notes and categories."""
+from datetime import date
+
 from flask import Blueprint, jsonify, request
 
+from .. import config
 from ..db import get_db
 from ..helpers import get_categories, normalize_id
 from ..security import require_unlock
@@ -46,24 +49,72 @@ def delete_person(person_id):
     return jsonify({"ok": True})
 
 
+ALLOWED_FIELDS = ("details", "profile", "name", "category") + config.PROFILE_FIELD_NAMES
+
+
+def _validate_field(field: str, content):
+    """Return an error message for a bad value, or None when it is acceptable.
+
+    Everything is stored as text and "" always means "not set", so clearing a
+    field is never rejected.
+    """
+    if not isinstance(content, str):
+        return f"{field} must be a string"
+    content = content.strip()
+    if not content:
+        return None
+    if field in config.PROFILE_DATE_FIELDS:
+        try:
+            date.fromisoformat(content)
+        except ValueError:
+            label = "Start date" if field == "start_date" else "Birth date"
+            return f"{label} must be a date in YYYY-MM-DD format"
+    elif field == "grade" and content not in config.GRADES:
+        return "Grade must be one of: " + ", ".join(config.GRADES)
+    elif field == "status" and content not in config.STATUSES:
+        return "Status must be one of: " + ", ".join(config.STATUSES)
+    return None
+
+
 @bp.route("/api/person/<person_id>", methods=["PUT"])
 @require_unlock
 def update_person(person_id):
-    data    = request.get_json() or {}
-    allowed = ("details", "profile", "name", "category")
-    if "field" not in data or data["field"] not in allowed:
-        return jsonify({"error": f"field must be one of {allowed}"}), 400
-    field   = data["field"]
-    content = data.get("content", "")
+    """Update one field ({"field": ..., "content": ...}) or several at once
+    ({"fields": {name: content, ...}}).
+
+    The batch form exists so the edit dialog saves in a single request: nine
+    parallel single-field PUTs would each open their own SQLCipher connection
+    and contend for the write lock.
+    """
+    data = request.get_json() or {}
+    if "fields" in data:
+        updates = data["fields"]
+        if not isinstance(updates, dict) or not updates:
+            return jsonify({"error": "fields must be a non-empty object"}), 400
+    elif "field" in data:
+        updates = {data["field"]: data.get("content", "")}
+    else:
+        return jsonify({"error": "field or fields required"}), 400
+
+    for field, content in updates.items():
+        if field not in ALLOWED_FIELDS:
+            return jsonify({"error": f"field must be one of {ALLOWED_FIELDS}"}), 400
+        err = _validate_field(field, content)
+        if err:
+            return jsonify({"error": err}), 400
+
     conn = get_db()
-    conn.execute(
-        f"""INSERT INTO person_overrides (person_id, {field})
-            VALUES (?, ?)
-            ON CONFLICT(person_id) DO UPDATE SET {field}=excluded.{field},
-                updated_at=CURRENT_TIMESTAMP""",
-        (person_id, content))
-    if field in ("name", "category"):
-        conn.execute(f"UPDATE persons SET {field}=? WHERE person_id=?", (content, person_id))
+    for field, content in updates.items():
+        if field in config.PROFILE_FIELD_NAMES:
+            content = content.strip()
+        conn.execute(
+            f"""INSERT INTO person_overrides (person_id, {field})
+                VALUES (?, ?)
+                ON CONFLICT(person_id) DO UPDATE SET {field}=excluded.{field},
+                    updated_at=CURRENT_TIMESTAMP""",
+            (person_id, content))
+        if field in ("name", "category"):
+            conn.execute(f"UPDATE persons SET {field}=? WHERE person_id=?", (content, person_id))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
