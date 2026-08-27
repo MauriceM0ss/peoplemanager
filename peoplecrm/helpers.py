@@ -109,6 +109,57 @@ def pretty_date(iso: str) -> str:
         return ""
 
 
+def whole_years_since(iso: str, today: date | None = None) -> int:
+    """Completed years between an ISO date and today, counted by anniversary.
+
+    Dividing elapsed days by 365.25 loses a day across leap years and reports
+    two full years as one, so count the anniversary directly instead.
+    """
+    try:
+        d = date.fromisoformat(iso)
+    except (ValueError, TypeError):
+        return 0
+    today = today or date.today()
+    years = today.year - d.year
+    if (today.month, today.day) < (d.month, d.day):
+        years -= 1
+    return max(0, years)
+
+
+def format_years(n: float) -> str:
+    """12.0 -> '12 yrs', 1.0 -> '1 yr', 12.5 -> '12.5 yrs'."""
+    text = f"{n:g}"
+    return f"{text} yr" if n == 1 else f"{text} yrs"
+
+
+def experience_display(years: str, as_of: str) -> dict:
+    """Present a years-of-experience figure together with the date it was noted.
+
+    A bare "12 years" silently rots — two years later it still reads as 12.
+    So the stored figure is always shown next to the date it was recorded, and
+    once a full year has passed a rough present-day estimate leads instead,
+    marked approximate. Returns {} when nothing is recorded.
+    """
+    years = (years or "").strip()
+    if not years:
+        return {}
+    try:
+        n = float(years.replace(",", "."))
+    except ValueError:
+        return {}
+
+    entered = format_years(n)
+    noted   = pretty_date(as_of)
+    if not noted:
+        return {"primary": entered, "note": ""}
+
+    elapsed = whole_years_since(as_of)
+    if elapsed >= 1:
+        return {"primary": f"~{format_years(n + elapsed)}",
+                "note": f"{entered} noted {noted}"}
+    return {"primary": entered, "note": f"noted {noted}"}
+
+
 def doc_icon(ext: str) -> str:
     if ext in {'xls', 'xlsx', 'ods', 'csv'}:   return '📊'
     if ext in {'doc', 'docx', 'odt', 'rtf'}:   return '📝'
@@ -122,3 +173,4 @@ def register_filters(app):
     app.template_filter("category_color")(category_color)
     app.template_filter("doc_icon")(doc_icon)
     app.template_filter("pretty_date")(pretty_date)
+    app.template_filter("experience_display")(experience_display)

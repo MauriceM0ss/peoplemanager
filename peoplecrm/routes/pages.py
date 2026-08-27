@@ -31,6 +31,7 @@ def tree_data():
             ordered.append(p["category"])
         cats[p["category"]].append({
             "id": p["id"], "name": p["name"], "category": p["category"],
+            "conversations": p["meeting_count"],
             "tasks":     open_tasks.get(p["id"], 0),
             "notes":     note_counts.get(p["id"], 0),
             "documents": doc_counts.get(p["id"], 0),
@@ -67,8 +68,9 @@ def person_detail(person_id):
         "SELECT id, title, content, meeting_date FROM meetings "
         "WHERE person_id = ? ORDER BY meeting_date DESC, id DESC", (person_id,)).fetchall()
     override = conn.execute(
-        "SELECT details, profile, name, category, start_date, birth_date, role, grade, status "
-        "FROM person_overrides WHERE person_id = ?",
+        "SELECT details, profile, name, category, "
+        + ", ".join(config.STORED_PROFILE_FIELDS)
+        + " FROM person_overrides WHERE person_id = ?",
         (person_id,)).fetchone()
     db_tasks = conn.execute(
         "SELECT id, text, done FROM tasks WHERE person_id = ? ORDER BY done ASC, id ASC",
@@ -85,14 +87,14 @@ def person_detail(person_id):
     conn.close()
 
     person["has_photo"] = has_photo is not None
-    for field in config.PROFILE_FIELD_NAMES:
+    for field in config.STORED_PROFILE_FIELDS:
         person[field] = ""
     if override:
         if override["details"]  is not None: person["details"]  = override["details"]
         if override["profile"]  is not None: person["profile"]  = override["profile"]
         if override["name"]     is not None: person["name"]     = override["name"]
         if override["category"] is not None: person["category"] = override["category"]
-        for field in config.PROFILE_FIELD_NAMES:
+        for field in config.STORED_PROFILE_FIELDS:
             if override[field] is not None:
                 person[field] = override[field]
 

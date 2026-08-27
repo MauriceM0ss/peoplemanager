@@ -31,12 +31,24 @@
       <h3>Profile overview</h3>
       <dl class="profile-fields">
         {% for field, label in profile_fields %}
+        {% if field == 'experience_years' %}
+        {# Experience carries the date it was noted, so an ageing figure reads honestly. #}
+        {% set exp = person.experience_years | experience_display(person.experience_as_of) %}
+        <div class="profile-field" data-field="experience_years">
+          <dt class="profile-key">{{ label }}</dt>
+          <dd class="profile-value {{ 'is-set' if exp else 'is-empty' }}" id="pf-experience_years">
+            <span class="exp-primary">{{ exp.primary if exp else '—' }}</span>
+            {% if exp and exp.note %}<span class="exp-note">{{ exp.note }}</span>{% endif %}
+          </dd>
+        </div>
+        {% else %}
         {% set raw = person[field] %}
         {% set shown = raw | pretty_date if field in ('start_date', 'birth_date') else raw %}
         <div class="profile-field" data-field="{{ field }}">
           <dt class="profile-key">{{ label }}</dt>
           <dd class="profile-value {{ 'is-set' if shown else 'is-empty' }}" id="pf-{{ field }}">{{ shown or '—' }}</dd>
         </div>
+        {% endif %}
         {% endfor %}
       </dl>
       <div class="md-content" id="profile-view" data-raw="{{ person.profile | e }}"></div>
@@ -88,6 +100,10 @@
             <option value="{{ g }}" {% if person.grade == g %}selected{% endif %}>{{ g }}</option>
             {% endfor %}
           </select>
+        </label>
+        <label class="modal-label">Years of experience
+          <input type="number" id="pf-input-experience_years" min="0" max="80" step="0.5"
+                 value="{{ person.experience_years }}" placeholder="e.g. 12">
         </label>
         <label class="modal-label">Status
           <select id="pf-input-status">
@@ -142,8 +158,16 @@
   <div class="main-panes">
   <div class="meetings-pane person-section" data-section="conversations">
     <div class="meetings-heading">
-      <h2>Conversations <span class="meeting-count" id="meeting-count">{{ person.meeting_count }}</span></h2>
+      <h2>Conversations <span class="meeting-count" id="meeting-count">{{ person.meeting_count }}</span> <span class="heading-person">· <span class="js-heading-name">{{ person.name }}</span></span></h2>
       <button class="btn-new-meeting" id="btn-new-meeting">+ Add conversation</button>
+    </div>
+
+    <!-- Searches only this person's conversations, titles and notes alike. -->
+    <div class="convo-search">
+      <input type="search" id="convo-search" autocomplete="off"
+             placeholder="Search {{ person.name }}'s conversations…"
+             aria-label="Search this person's conversations">
+      <span class="convo-search-count" id="convo-search-count" hidden></span>
     </div>
 
     <!-- ── new meeting form ── -->
@@ -193,7 +217,7 @@
   <!-- ── Taken ── -->
   <div class="tasks-pane person-section" id="tasks" data-section="tasks" hidden>
     <div class="tasks-heading">
-      <h2>Tasks <span class="meeting-count" id="task-count">{{ tasks|length }}</span></h2>
+      <h2>Tasks <span class="meeting-count" id="task-count">{{ tasks|length }}</span> <span class="heading-person">· <span class="js-heading-name">{{ person.name }}</span></span></h2>
     </div>
 
     <ul class="task-list" id="task-list">
@@ -217,7 +241,7 @@
   <!-- ── Notes ── -->
   <div class="notes-pane person-section" id="notes" data-section="notes" hidden>
     <div class="notes-heading">
-      <h2>Notes <span class="meeting-count" id="note-count">{{ notes|length }}</span></h2>
+      <h2>Notes <span class="meeting-count" id="note-count">{{ notes|length }}</span> <span class="heading-person">· <span class="js-heading-name">{{ person.name }}</span></span></h2>
       <button class="btn-new-note" id="btn-new-note">+ Add note</button>
     </div>
 
@@ -275,7 +299,7 @@
   <!-- ── Documents ── -->
   <div class="documents-pane person-section" id="documents" data-section="documents" hidden>
     <div class="documents-heading">
-      <h2>Documents <span class="meeting-count" id="doc-count">{{ documents|length }}</span></h2>
+      <h2>Documents <span class="meeting-count" id="doc-count">{{ documents|length }}</span> <span class="heading-person">· <span class="js-heading-name">{{ person.name }}</span></span></h2>
       <label class="doc-upload-label" title="Upload document">
         + Upload
         <input type="file" id="doc-input" hidden multiple
@@ -435,8 +459,58 @@ function prettyDate(iso) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Mirrors helpers.format_years / experience_display.
+function formatYears(n) {
+  const text = String(Number(n.toFixed(1)));
+  return n === 1 ? `${text} yr` : `${text} yrs`;
+}
+
+function wholeYearsSince(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return 0;
+  const today = new Date();
+  let years = today.getFullYear() - d.getFullYear();
+  const before = today.getMonth() < d.getMonth()
+    || (today.getMonth() === d.getMonth() && today.getDate() < d.getDate());
+  if (before) years -= 1;
+  return Math.max(0, years);
+}
+
+function experienceDisplay(years, asOf) {
+  const n = parseFloat(String(years || '').replace(',', '.'));
+  if (!String(years || '').trim() || isNaN(n)) return null;
+  const entered = formatYears(n);
+  const noted   = prettyDate(asOf);
+  if (!noted) return { primary: entered, note: '' };
+  const elapsed = wholeYearsSince(asOf);
+  if (elapsed >= 1) {
+    return { primary: '~' + formatYears(n + elapsed), note: `${entered} noted ${noted}` };
+  }
+  return { primary: entered, note: `noted ${noted}` };
+}
+
+function paintExperience(years, asOf) {
+  const cell = document.getElementById('pf-experience_years');
+  if (!cell) return;
+  const exp = experienceDisplay(years, asOf);
+  cell.textContent = '';
+  const primary = document.createElement('span');
+  primary.className = 'exp-primary';
+  primary.textContent = exp ? exp.primary : '—';
+  cell.appendChild(primary);
+  if (exp && exp.note) {
+    const note = document.createElement('span');
+    note.className = 'exp-note';
+    note.textContent = exp.note;
+    cell.appendChild(note);
+  }
+  cell.classList.toggle('is-set', !!exp);
+  cell.classList.toggle('is-empty', !exp);
+}
+
 function paintProfileFields(values) {
   for (const field of PROFILE_FIELDS) {
+    if (field === 'experience_years') continue;   // composite, painted separately
     const cell = document.getElementById('pf-' + field);
     if (!cell) continue;
     const raw   = values[field] || '';
@@ -469,15 +543,17 @@ editSave.addEventListener('click', async () => {
     body: JSON.stringify({ fields }),
   });
 
+  const saved = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    editStatus.textContent = '✗ ' + (data.error || 'Error saving');
+    editStatus.textContent = '✗ ' + (saved.error || 'Error saving');
     editSave.disabled = false;
     return;
   }
 
   // Update sidebar display (window.hashColor mirrors Python's palette).
   displayName.textContent = newName;
+  document.querySelectorAll('.js-heading-name').forEach(el => { el.textContent = newName; });
+  if (convoSearch) convoSearch.placeholder = `Search ${newName}'s conversations…`;
   displayBadge.textContent = newCat;
   displayBadge.style.background = window.hashColor(newCat);
   document.title = newName + ' · People Manager';
@@ -487,6 +563,11 @@ editSave.addEventListener('click', async () => {
   if (window.refreshNavTree) window.refreshNavTree();
 
   paintProfileFields(fields);
+  // The server stamps the date only when the number actually changed, and
+  // reports the new stamp back; absent means the existing one still stands.
+  if (saved.experience_as_of !== undefined && saved.experience_as_of !== null) {
+    paintExperience(fields.experience_years, saved.experience_as_of);
+  }
   detailsView.dataset.raw = newDetails;
   detailsView.innerHTML = marked.parse(newDetails);
   profileView.dataset.raw = newProfile;
@@ -631,6 +712,11 @@ nmSave.addEventListener('click', async () => {
   const counter = document.getElementById('meeting-count');
   counter.textContent = parseInt(counter.textContent) + 1;
 
+  // A filter would hide the conversation just added unless it happened to
+  // match, so clear it and show the full list again.
+  if (convoSearch) convoSearch.value = '';
+  runConvoSearch();
+
   // Reset form
   nmCancel.click();
   nmSave.disabled = false;
@@ -649,6 +735,7 @@ function wireDeleteBtn(btn) {
     item.remove();
     const counter = document.getElementById('meeting-count');
     counter.textContent = parseInt(counter.textContent) - 1;
+    runConvoSearch();          // keep the "N of M" tally honest
   });
 }
 document.querySelectorAll('.btn-delete-meeting').forEach(wireDeleteBtn);
@@ -1135,15 +1222,132 @@ document.addEventListener('paste', e => {
   if (imgs.length) { e.preventDefault(); uploadPictures(imgs); }
 });
 
+// ── Conversation search ───────────────────────────────────────────────────────
+// Scoped to the person on screen. Every conversation is already in the DOM, so
+// this filters locally: no request, no reload, and it searches the raw markdown
+// in data-md rather than the rendered HTML, which means collapsed (never yet
+// rendered) conversations are searched too.
+const convoSearch      = document.getElementById('convo-search');
+const convoSearchCount = document.getElementById('convo-search-count');
+
+function convoItems() { return Array.from(document.querySelectorAll('.meeting-item')); }
+
+function meetingHaystack(item) {
+  const title = item.querySelector('.meeting-title')?.textContent || '';
+  const date  = item.querySelector('.meeting-date')?.textContent || '';
+  const body  = item.querySelector('.meeting-content')?.dataset.md || '';
+  return (title + '\n' + date + '\n' + body).toLowerCase();
+}
+
+// Wrap matches in <mark> by walking text nodes, so highlighting can never
+// corrupt the rendered markup the way an innerHTML replace would.
+function highlight(root, term) {
+  if (!term) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => (n.parentElement.closest('mark') ? NodeFilter.FILTER_REJECT
+                                                      : NodeFilter.FILTER_ACCEPT),
+  });
+  const targets = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeValue.toLowerCase().includes(term)) targets.push(n);
+  }
+  for (const node of targets) {
+    const frag = document.createDocumentFragment();
+    const text = node.nodeValue;
+    let i = 0;
+    for (;;) {
+      const at = text.toLowerCase().indexOf(term, i);
+      if (at === -1) break;
+      if (at > i) frag.appendChild(document.createTextNode(text.slice(i, at)));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hit';
+      mark.textContent = text.slice(at, at + term.length);
+      frag.appendChild(mark);
+      i = at + term.length;
+    }
+    if (i < text.length) frag.appendChild(document.createTextNode(text.slice(i)));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+function clearHighlights(item) {
+  item.querySelectorAll('mark.search-hit').forEach(m => {
+    m.replaceWith(document.createTextNode(m.textContent));
+  });
+  // Merge the text nodes the unwrap left behind, so a later search still sees
+  // a match that straddles where a <mark> used to be.
+  item.querySelectorAll('.meeting-title, .meeting-content').forEach(el => el.normalize());
+}
+
+function runConvoSearch() {
+  const term  = (convoSearch.value || '').trim().toLowerCase();
+  const items = convoItems();
+  const noneEl = document.getElementById('no-meetings');
+  let shown = 0;
+
+  for (const item of items) {
+    clearHighlights(item);
+    if (!term) {
+      item.hidden = false;
+      if (item.dataset.wasOpen !== undefined) {
+        item.open = item.dataset.wasOpen === '1';
+        delete item.dataset.wasOpen;
+      }
+      continue;
+    }
+    const hit = meetingHaystack(item).includes(term);
+    item.hidden = !hit;
+    if (!hit) continue;
+    shown++;
+    // Remember how it was left, so clearing the search restores the view.
+    if (item.dataset.wasOpen === undefined) item.dataset.wasOpen = item.open ? '1' : '0';
+    item.open = true;
+    renderMeeting(item);                     // a hit may be in an unrendered body
+    highlight(item.querySelector('.meeting-title'), term);
+    highlight(item.querySelector('.meeting-content'), term);
+  }
+
+  if (!term) {
+    convoSearchCount.hidden = true;
+    if (noneEl) noneEl.hidden = items.length > 0;
+    return;
+  }
+  convoSearchCount.hidden = false;
+  convoSearchCount.textContent = shown
+    ? `${shown} of ${items.length} ${items.length === 1 ? 'conversation' : 'conversations'}`
+    : 'No conversations match';
+  convoSearchCount.classList.toggle('is-empty', shown === 0);
+  if (noneEl) noneEl.hidden = true;
+}
+
+if (convoSearch) {
+  convoSearch.addEventListener('input', runConvoSearch);
+  convoSearch.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && convoSearch.value) {
+      e.stopPropagation();               // clear the box before closing anything
+      convoSearch.value = '';
+      runConvoSearch();
+    }
+  });
+}
+window.runConvoSearch = runConvoSearch;
+
 // ── Section views ─────────────────────────────────────────────────────────────
-// The page shows one section at a time, chosen from the sidebar: the person page
-// itself shows Conversations; #tasks / #notes / #documents show those sections
-// (Documents shows documents + pictures together).
+// One section at a time, chosen from the sidebar. The person link itself opens
+// the card alone (no hash); #conversations / #tasks / #notes / #documents each
+// open their own view beside it (Documents shows documents + pictures together).
 const SECTION_PANES = Array.from(document.querySelectorAll('.person-section'));
 const VALID_SECTIONS = ['conversations', 'tasks', 'notes', 'documents'];
+const personLayout = document.querySelector('.person-layout');
+
 function showSection(name) {
-  if (!VALID_SECTIONS.includes(name)) name = 'conversations';
-  SECTION_PANES.forEach(el => { el.hidden = el.dataset.section !== name; });
+  // Anything unrecognised — including no hash at all — is the card on its own.
+  // The two views are exclusive: the person link shows the card, each section
+  // link shows that section full-width with the card out of the way.
+  const cardOnly = !VALID_SECTIONS.includes(name);
+  SECTION_PANES.forEach(el => { el.hidden = cardOnly || el.dataset.section !== name; });
+  personLayout.classList.toggle('card-only', cardOnly);
+  personLayout.classList.toggle('section-only', !cardOnly);
   document.querySelector('.app-main')?.scrollTo(0, 0);
 }
 showSection(decodeURIComponent(location.hash.slice(1)));
