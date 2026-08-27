@@ -78,3 +78,29 @@ def test_pretty_date(appmod):
     assert appmod.pretty_date("") == ""
     assert appmod.pretty_date("not a date") == ""
     assert appmod.pretty_date(None) == ""
+
+
+def test_whole_years_since_counts_anniversaries(appmod):
+    from datetime import date
+    w = appmod.whole_years_since
+    # Two calendar years is two, even though 730 days / 365.25 rounds to one.
+    assert w("2024-08-27", date(2026, 8, 27)) == 2
+    assert w("2024-08-28", date(2026, 8, 27)) == 1
+    assert w("2024-02-29", date(2025, 2, 28)) == 0
+    assert w("2024-02-29", date(2025, 3, 1)) == 1
+    assert w("2030-01-01", date(2026, 1, 1)) == 0   # future dates never go negative
+    assert w("not a date") == 0
+
+
+def test_experience_display(appmod):
+    from datetime import date
+    e, today = appmod.experience_display, date.today().isoformat()
+    assert e("", "") == {}
+    assert e("abc", today) == {}
+    assert e("12", today) == {"primary": "12 yrs", "note": f"noted {appmod.pretty_date(today)}"}
+    assert e("1", today)["primary"] == "1 yr"
+    assert e("12.5", today)["primary"] == "12.5 yrs"
+    assert e("12", "")["note"] == ""
+    aged = e("12", "2024-08-27")
+    assert aged["primary"].startswith("~")
+    assert "noted 27 Aug 2024" in aged["note"]

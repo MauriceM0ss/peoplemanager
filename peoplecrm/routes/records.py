@@ -73,7 +73,35 @@ def _validate_field(field: str, content):
         return "Grade must be one of: " + ", ".join(config.GRADES)
     elif field == "status" and content not in config.STATUSES:
         return "Status must be one of: " + ", ".join(config.STATUSES)
+    elif field == "experience_years":
+        try:
+            years = float(content.replace(",", "."))
+        except ValueError:
+            return "Experience must be a number of years"
+        if not 0 <= years <= config.MAX_EXPERIENCE_YEARS:
+            return f"Experience must be between 0 and {config.MAX_EXPERIENCE_YEARS} years"
     return None
+
+
+def _stamp_experience(conn, person_id: str, updates: dict) -> dict:
+    """Date the experience figure, so N years can be extrapolated later.
+
+    Stamped only when the number actually changes: re-saving the dialog
+    without touching it must not silently make a stale figure look current.
+    Clearing the number clears the stamp with it.
+    """
+    field = "experience_years"
+    if field not in updates:
+        return updates
+    row = conn.execute(
+        f"SELECT {field} FROM person_overrides WHERE person_id = ?", (person_id,)).fetchone()
+    current = (row[field] if row and row[field] is not None else "").strip()
+    new_value = updates[field].strip()
+    if new_value == current:
+        return updates
+    updates = dict(updates)
+    updates[config.EXPERIENCE_STAMP_FIELD] = date.today().isoformat() if new_value else ""
+    return updates
 
 
 @bp.route("/api/person/<person_id>", methods=["PUT"])
@@ -104,8 +132,9 @@ def update_person(person_id):
             return jsonify({"error": err}), 400
 
     conn = get_db()
+    updates = _stamp_experience(conn, person_id, updates)
     for field, content in updates.items():
-        if field in config.PROFILE_FIELD_NAMES:
+        if field in config.STORED_PROFILE_FIELDS:
             content = content.strip()
         conn.execute(
             f"""INSERT INTO person_overrides (person_id, {field})
@@ -117,7 +146,7 @@ def update_person(person_id):
             conn.execute(f"UPDATE persons SET {field}=? WHERE person_id=?", (content, person_id))
     conn.commit()
     conn.close()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "experience_as_of": updates.get(config.EXPERIENCE_STAMP_FIELD)})
 
 
 # ── meetings ──────────────────────────────────────────────────────────────────

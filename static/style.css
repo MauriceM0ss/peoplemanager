@@ -581,6 +581,14 @@ select { cursor: pointer; padding-right: 30px;
   display: grid; grid-template-columns: 300px 1fr; gap: 28px; align-items: start;
 }
 .main-panes { display: flex; flex-direction: column; gap: 28px; }
+/* Two exclusive views. The person link opens the card on its own, centred and
+   given room so a lone card reads as intended rather than as a broken layout;
+   each section link gives that section the full width, card out of the way. */
+.person-layout.card-only { grid-template-columns: minmax(0, 460px); justify-content: center; }
+.person-layout.card-only .sidebar { position: static; }
+.person-layout.card-only .main-panes { display: none; }
+.person-layout.section-only { grid-template-columns: minmax(0, 1fr); }
+.person-layout.section-only .sidebar { display: none; }
 /* Each section is its own view now, so the panes flow full-width in main-panes
    (display:contents makes this wrapper layout-transparent). */
 .tasks-notes-row { display: contents; }
@@ -610,6 +618,11 @@ select { cursor: pointer; padding-right: 30px;
 .profile-key { font-size: .78rem; color: var(--muted); white-space: nowrap; }
 .profile-value { font-size: .82rem; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .profile-value.is-empty { color: var(--muted); opacity: .6; }
+/* Experience is a figure plus the date it was noted; the date sits under it in
+   smaller type so the number stays scannable but never stands without context. */
+.profile-field[data-field="experience_years"] .profile-value { display: flex; flex-direction: column; gap: 1px; }
+.exp-primary { font-variant-numeric: tabular-nums; }
+.exp-note { font-size: .72rem; color: var(--muted); }
 /* Status reads as a state, so give it a chip like the category badge. */
 .profile-field[data-field="status"] .profile-value.is-set {
   display: inline-block; justify-self: start;
@@ -661,10 +674,20 @@ select { cursor: pointer; padding-right: 30px;
 }
 .meetings-heading h2, .tasks-heading h2, .notes-heading h2, .documents-heading h2 {
   font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px;
+  /* min-width:0 lets the heading shrink below its content so a long person
+     name ellipsises, instead of shoving the action button off the row. */
+  min-width: 0; flex: 1;
+}
+/* Whose data this is. The section views hide the person card, so the heading
+   carries the name — muted and lighter, so the section itself stays primary. */
+.heading-person {
+  font-weight: 500; font-size: .9rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
 .meeting-count {
   display: inline-block; background: var(--accent); color: var(--on-accent);
   font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 20px;
+  flex-shrink: 0;
 }
 .meetings-pane, .tasks-pane, .notes-pane, .documents-pane { display: flex; flex-direction: column; gap: 8px; }
 /* Sidebar "jump to section" anchors land a little below the top edge */
@@ -672,10 +695,26 @@ select { cursor: pointer; padding-right: 30px;
 
 .btn-new-meeting, .btn-new-note, .doc-upload-label {
   cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px;
+  flex-shrink: 0;
   background: var(--accent); color: var(--on-accent); border: none; border-radius: 8px;
   font-size: .82rem; font-weight: 700; white-space: nowrap; transition: opacity .15s; font-family: inherit;
 }
 .btn-new-meeting:hover, .btn-new-note:hover, .doc-upload-label:hover { opacity: .9; }
+
+/* ── Conversation search ──────────────────────────────────────────────────── */
+.convo-search { display: flex; align-items: center; gap: 10px; }
+.convo-search input {
+  flex: 1; min-width: 0; padding: 8px 12px; font-size: .85rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; font-family: inherit;
+}
+.convo-search input:focus { outline: none; border-color: var(--accent); }
+.convo-search-count { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+.convo-search-count.is-empty { color: var(--danger); }
+mark.search-hit {
+  background: var(--accent); color: var(--on-accent);
+  border-radius: 3px; padding: 0 2px; font-weight: 600;
+}
 
 /* ── New meeting/note form ────────────────────────────────────────────────── */
 .new-meeting-form {

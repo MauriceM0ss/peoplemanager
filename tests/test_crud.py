@@ -2,6 +2,12 @@
 from conftest import make_person
 
 
+def appmod_profile_fields():
+    """The profile fields rendered on the person card, straight from config."""
+    from peoplecrm import config
+    return config.PROFILE_FIELDS
+
+
 # ── persons ────────────────────────────────────────────────────────────────
 def test_create_person_appears_in_tree(auth_client):
     pid = make_person(auth_client, "Alice Smith", "Friends")
@@ -220,8 +226,8 @@ def test_profile_fields_can_be_cleared(auth_client):
     assert r.status_code == 200
     html = _profile_html(auth_client, pid)
     assert "Consultant" not in html
-    # Both cleared fields fall back to the em-dash placeholder.
-    assert html.count('class="profile-value is-empty"') == 5
+    # Every profile field falls back to the em-dash placeholder.
+    assert html.count('profile-value is-empty') == len(appmod_profile_fields())
     assert "selected" not in html.split('id="pf-input-grade"')[1].split("</select>")[0]
 
 
@@ -253,3 +259,61 @@ def test_batched_update_is_all_or_nothing(auth_client):
     assert r.status_code == 400
     # The valid half of the rejected batch must not have landed either.
     assert "Threat Hunter" not in _profile_html(auth_client, pid)
+
+
+# ── years of experience ────────────────────────────────────────────────────
+def test_experience_is_stamped_with_todays_date(auth_client):
+    from datetime import date
+    pid = make_person(auth_client)
+    r = auth_client.put(f"/api/person/{pid}", json={"fields": {"experience_years": "12"}})
+    assert r.status_code == 200
+    assert r.get_json()["experience_as_of"] == date.today().isoformat()
+    html = _profile_html(auth_client, pid)
+    assert "12 yrs" in html
+
+
+def test_experience_stamp_only_moves_when_the_number_changes(auth_client):
+    pid = make_person(auth_client)
+    auth_client.put(f"/api/person/{pid}", json={"fields": {"experience_years": "12"}})
+    # Re-saving the same number must not refresh the stamp, or a stale figure
+    # would quietly look current again.
+    r = auth_client.put(f"/api/person/{pid}",
+                        json={"fields": {"experience_years": "12", "role": "Analyst"}})
+    assert r.get_json().get("experience_as_of") is None
+    # Changing it does re-stamp.
+    r = auth_client.put(f"/api/person/{pid}", json={"fields": {"experience_years": "13"}})
+    assert r.get_json()["experience_as_of"] is not None
+
+
+def test_clearing_experience_clears_the_stamp(auth_client):
+    pid = make_person(auth_client)
+    auth_client.put(f"/api/person/{pid}", json={"fields": {"experience_years": "12"}})
+    r = auth_client.put(f"/api/person/{pid}", json={"fields": {"experience_years": ""}})
+    assert r.get_json()["experience_as_of"] == ""
+    assert "12 yrs" not in _profile_html(auth_client, pid)
+
+
+def test_experience_validation(auth_client):
+    pid = make_person(auth_client)
+    for bad in ("abc", "-1", "200"):
+        r = auth_client.put(f"/api/person/{pid}", json={"fields": {"experience_years": bad}})
+        assert r.status_code == 400, bad
+    # Decimals and comma decimal separators are accepted.
+    for good in ("12", "12.5", "12,5", "0"):
+        assert auth_client.put(f"/api/person/{pid}",
+                               json={"fields": {"experience_years": good}}).status_code == 200
+
+
+def test_experience_as_of_is_not_client_settable(auth_client):
+    pid = make_person(auth_client)
+    r = auth_client.put(f"/api/person/{pid}",
+                        json={"fields": {"experience_as_of": "1999-01-01"}})
+    assert r.status_code == 400
+
+
+def test_tree_reports_conversation_counts(auth_client):
+    pid = make_person(auth_client)
+    auth_client.post(f"/api/meeting/{pid}", json={"title": "Chat", "content": "Power BI"})
+    tree = auth_client.get("/api/tree").get_json()
+    person = next(p for c in tree for p in c["people"] if p["id"] == pid)
+    assert person["conversations"] == 1

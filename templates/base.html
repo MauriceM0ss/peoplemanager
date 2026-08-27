@@ -649,7 +649,9 @@
 
   const COLLAPSE_KEY = 'nav-sidebar-collapsed';
   const PERSON_EXPAND_KEY = 'nav-person-expanded';
-  const PERSON_SECTIONS = [['tasks', 'Tasks'], ['notes', 'Notes'], ['documents', 'Documents']];
+  // The person link itself opens the card; each section below it is its own view.
+  const PERSON_SECTIONS = [['conversations', 'Conversations'], ['tasks', 'Tasks'],
+                           ['notes', 'Notes'], ['documents', 'Documents']];
   // Kept outside renderNavTree so expand/collapse survives a re-render.
   let collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]'));
   let personExpanded = new Set(JSON.parse(localStorage.getItem(PERSON_EXPAND_KEY) || '[]'));

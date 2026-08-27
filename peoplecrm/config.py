@@ -19,14 +19,25 @@ STATUSES = ("Customer Deployed", "On the Bench", "Internally Deployed")
 
 # field -> label, in the order they are displayed and edited.
 PROFILE_FIELDS = (
-    ("start_date", "Start date"),
-    ("birth_date", "Birth date"),
-    ("role",       "Role"),
-    ("grade",      "Grade"),
-    ("status",     "Status"),
+    ("start_date",       "Start date"),
+    ("birth_date",       "Birth date"),
+    ("role",             "Role"),
+    ("grade",            "Grade"),
+    ("status",           "Status"),
+    ("experience_years", "Experience"),
 )
 PROFILE_FIELD_NAMES = tuple(f for f, _ in PROFILE_FIELDS)
 PROFILE_DATE_FIELDS = ("start_date", "birth_date")
+
+# Years of experience ages: "12 years" is only meaningful next to the date it
+# was noted. experience_as_of is stamped by the server whenever
+# experience_years changes, and is never edited directly, so it cannot drift
+# away from the number it dates.
+EXPERIENCE_STAMP_FIELD = "experience_as_of"
+MAX_EXPERIENCE_YEARS = 80
+
+# Every column on person_overrides that the person page reads back.
+STORED_PROFILE_FIELDS = PROFILE_FIELD_NAMES + (EXPERIENCE_STAMP_FIELD,)
 
 ALLOWED_DOC_EXTS = {
     '.txt', '.md', '.log', '.csv', '.rtf', '.json', '.xml', '.yaml', '.yml',
