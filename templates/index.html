@@ -75,7 +75,7 @@ function update() {
 search.addEventListener('input', update);
 
 catSelect.addEventListener('change', () => {
-  localStorage.setItem('robsidian-cat', catSelect.value);
+  localStorage.setItem('pv-cat', catSelect.value);
   update();
 });
 
@@ -100,15 +100,15 @@ function sortCards() {
 }
 
 sortSelect.addEventListener('change', () => {
-  localStorage.setItem('robsidian-sort', sortSelect.value);
+  localStorage.setItem('pv-sort', sortSelect.value);
   sortCards();
 });
 
 // ── Restore saved preferences ─────────────────────────────────────────────────
-const savedSort = localStorage.getItem('robsidian-sort');
+const savedSort = localStorage.getItem('pv-sort');
 if (savedSort) sortSelect.value = savedSort;
 
-const savedCat = localStorage.getItem('robsidian-cat');
+const savedCat = localStorage.getItem('pv-cat');
 if (savedCat !== null) catSelect.value = savedCat;
 
 sortCards(); // applies sort + filter in one pass
@@ -154,7 +154,7 @@ async function rebuildCatFilter() {
   }
   // Keep the active filter if it still exists, otherwise fall back to Everyone.
   catSelect.value = names.includes(previous) ? previous : '';
-  if (catSelect.value !== previous) localStorage.setItem('robsidian-cat', catSelect.value);
+  if (catSelect.value !== previous) localStorage.setItem('pv-cat', catSelect.value);
   update();
 }
 

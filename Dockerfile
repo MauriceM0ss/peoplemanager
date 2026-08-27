@@ -19,14 +19,12 @@ RUN apt-get update && \
 
 COPY . .
 
-# /notes is mounted read-only at runtime (your Obsidian vault)
-# /data  is a named volume that persists the database and config
+# /data is a named volume that persists the database and config
 VOLUME ["/data"]
 
 EXPOSE 8080
 
-ENV NOTES_DIR=/notes \
-    DB_PATH=/data/people.db
+ENV DB_PATH=/data/people.db
 
 # Liveness probe — hits the unauthenticated /healthz endpoint using the stdlib
 # (no curl in the slim image). Marks the container unhealthy if Flask stops
